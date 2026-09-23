@@ -10,12 +10,35 @@ export default async function DashboardPage() {
   if (!user) return null; // Middleware handles the redirect
 
   // 1. Fetch Primary Account details (for limits)
-  const { data: account } = await supabase
+  let { data: account } = await supabase
     .from('payment_accounts')
     .select('account_id, account_alias, routine_monthly_limit')
     .eq('user_id', user.id)
     .limit(1)
     .single();
+
+  // Auto-create a default checking account if the user doesn't have one (for new users)
+  if (!account) {
+    const { data: newAccount } = await supabase
+      .from('payment_accounts')
+      .insert({
+        user_id: user.id,
+        account_alias: 'Primary Checking',
+        account_type: 'DEBIT',
+        current_statement_balance: 5000.00,
+        routine_monthly_limit: 1000
+      })
+      .select('account_id, account_alias, routine_monthly_limit')
+      .single();
+    
+    account = newAccount;
+  }
+
+  // Fetch active projects for the FAB dropdown
+  const { data: activeProjects } = await supabase
+    .from('exempt_projects')
+    .select('project_id, name')
+    .eq('user_id', user.id);
 
   // 2. Fetch Active Cycle Status
   const { data: cycleData } = await supabase.rpc('get_pay_cycle_status', { p_user_id: user.id });
@@ -115,8 +138,11 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* Pass the account ID (or a safe fallback string) to the FAB so it can process transactions */}
-      <QuickExpenseFAB accountId={account?.account_id || ''} />
+      {/* Pass the account ID and active projects to the FAB so it can process transactions */}
+      <QuickExpenseFAB 
+        accountId={account?.account_id || '00000000-0000-0000-0000-000000000000'} 
+        activeProjects={activeProjects || []} 
+      />
     </div>
   );
 }

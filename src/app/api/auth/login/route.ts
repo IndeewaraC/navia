@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        shouldCreateUser: false, 
+        shouldCreateUser: true, 
       },
     });
 

@@ -6,15 +6,17 @@ import { useRouter } from 'next/navigation';
 interface QuickExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  accountId: string; // Passed down from the selected account card
+  accountId: string; 
+  activeProjects?: any[];
 }
 
-export default function QuickExpenseModal({ isOpen, onClose, accountId }: QuickExpenseModalProps) {
+export default function QuickExpenseModal({ isOpen, onClose, accountId, activeProjects = [] }: QuickExpenseModalProps) {
   const router = useRouter();
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
   const [paymentSource, setPaymentSource] = useState<'CREDIT' | 'DEBIT' | 'CASH'>('CREDIT');
   const [isExempt, setIsExempt] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +41,7 @@ export default function QuickExpenseModal({ isOpen, onClose, accountId }: QuickE
           transaction_date: new Date().toISOString().split('T')[0],
           category,
           is_budget_cap_exempt: isExempt,
+          project_id: isExempt && selectedProjectId ? selectedProjectId : undefined,
         }),
       });
 
@@ -174,6 +177,25 @@ export default function QuickExpenseModal({ isOpen, onClose, accountId }: QuickE
               </p>
             </div>
           </div>
+
+          {isExempt && activeProjects.length > 0 && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+              <label className="block text-sm font-semibold text-slate-300">
+                Link to Vault Project
+              </label>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                disabled={loading}
+                className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed appearance-none"
+              >
+                <option value="">-- No specific project --</option>
+                {activeProjects.map(p => (
+                  <option key={p.project_id} value={p.project_id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Dynamic Alerts */}
           {error && (

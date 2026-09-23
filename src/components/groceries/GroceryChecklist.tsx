@@ -14,14 +14,23 @@ interface GroceryChecklistProps {
 export default function GroceryChecklist({ tripId, storeName, accountId, initialItems }: GroceryChecklistProps) {
   const router = useRouter();
   // Using the previously built useOfflineGroceryDraft hook from src/hooks
-  const { items, updateItem, clearDraft, isOffline, pendingSync, rawSubtotal } = useOfflineGroceryDraft(tripId, initialItems);
+  const { items, updateItem, addItem, removeItem, clearDraft, isOffline, pendingSync, rawSubtotal } = useOfflineGroceryDraft(tripId, initialItems);
   
   const [taxAndFees, setTaxAndFees] = useState(0);
   const [discounts, setDiscounts] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [newItemName, setNewItemName] = useState('');
+  const [currentStoreName, setCurrentStoreName] = useState(storeName);
 
   const finalTotal = rawSubtotal + taxAndFees - discounts;
+
+  const handleAddItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newItemName.trim()) return;
+    addItem(newItemName.trim());
+    setNewItemName('');
+  };
 
   const handleCheckout = async () => {
     if (isOffline) {
@@ -38,7 +47,7 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           source_account_id: accountId,
-          store_name: storeName,
+          store_name: currentStoreName || 'Unnamed Store',
           trip_date: new Date().toISOString().split('T')[0],
           raw_subtotal: rawSubtotal,
           tax_and_fees: taxAndFees,
@@ -67,10 +76,16 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
     <div className="w-full max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden font-sans text-slate-100 selection:bg-indigo-500/30">
       
       {/* Header & Connectivity Status */}
-      <div className="p-6 border-b border-slate-800 bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-100">{storeName}</h2>
-          <p className="text-sm text-slate-400 font-medium">Live Cart</p>
+      <div className="p-6 border-b border-slate-800 bg-slate-900/50 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="flex-1 w-full mr-4">
+          <input 
+            type="text"
+            value={currentStoreName}
+            onChange={(e) => setCurrentStoreName(e.target.value)}
+            className="text-2xl font-bold tracking-tight text-slate-100 bg-transparent border-b border-transparent hover:border-slate-700 focus:border-emerald-400 focus:outline-none transition-colors w-full pb-1"
+            placeholder="Name this grocery run..."
+          />
+          <p className="text-sm text-slate-400 font-medium mt-1">Live Cart</p>
         </div>
         <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold border ${isOffline ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>
           {isOffline ? (
@@ -114,9 +129,34 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
                 className="w-24 pl-3 pr-2 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
                 placeholder="0.00"
               />
+              <button 
+                onClick={() => removeItem(item.id)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors ml-1"
+                title="Remove item"
+              >
+                ✕
+              </button>
             </div>
           </div>
         ))}
+        
+        {/* Add New Item Form */}
+        <form onSubmit={handleAddItem} className="flex gap-2 pt-2">
+          <input
+            type="text"
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+            placeholder="Add new item..."
+            className="flex-1 px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
+          />
+          <button 
+            type="submit"
+            disabled={!newItemName.trim()}
+            className="px-6 py-3 bg-slate-800 text-emerald-400 font-bold rounded-xl border border-slate-700 hover:bg-slate-700 hover:border-slate-600 disabled:opacity-50 transition-colors"
+          >
+            Add
+          </button>
+        </form>
         {items.length === 0 && (
           <div className="text-center py-8 text-slate-500 font-medium">
             No items in your cart yet.

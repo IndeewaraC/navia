@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import QuickExpenseModal from '@/src/components/forms/QuickExpenseModal';
 
-export default function QuickExpenseFAB({ accountId }: { accountId: string }) {
+export default function QuickExpenseFAB({ accountId, activeProjects = [] }: { accountId: string, activeProjects?: any[] }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
@@ -20,6 +20,7 @@ export default function QuickExpenseFAB({ accountId }: { accountId: string }) {
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         accountId={accountId} 
+        activeProjects={activeProjects}
       />
     </>
   );

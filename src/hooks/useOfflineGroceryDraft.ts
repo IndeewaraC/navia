@@ -57,14 +57,39 @@ export function useOfflineGroceryDraft(tripId: string, initialDraft: GroceryItem
     setPendingSync(false);
   }, [tripId]);
 
+  const addItem = useCallback((name: string) => {
+    setItems((prevItems) => {
+      const newItem: GroceryItem = {
+        id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        name,
+        shelfPrice: 0,
+        isChecked: false
+      };
+      const nextState = [...prevItems, newItem];
+      localStorage.setItem(`navia_grocery_draft_${tripId}`, JSON.stringify(nextState));
+      setPendingSync(true);
+      return nextState;
+    });
+  }, [tripId]);
+
+  const removeItem = useCallback((id: string) => {
+    setItems((prevItems) => {
+      const nextState = prevItems.filter(item => item.id !== id);
+      localStorage.setItem(`navia_grocery_draft_${tripId}`, JSON.stringify(nextState));
+      setPendingSync(true);
+      return nextState;
+    });
+  }, [tripId]);
+
   // Real-time subtotal calculation powered by the cached state
   const rawSubtotal = items
-    .filter(item => item.isChecked)
     .reduce((sum, item) => sum + item.shelfPrice, 0);
 
   return { 
     items, 
     updateItem, 
+    addItem,
+    removeItem,
     clearDraft, 
     isOffline, 
     pendingSync,

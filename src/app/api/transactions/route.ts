@@ -69,7 +69,13 @@ export async function POST(request: Request) {
     const { data: transaction, error: insertError } = await supabase
       .from('transactions')
       .insert({
-        ...parsedData,
+        source_account_id: parsedData.source_account_id,
+        txn_type: parsedData.txn_type,
+        amount: parsedData.amount,
+        transaction_date: parsedData.transaction_date,
+        category: parsedData.category,
+        is_budget_cap_exempt: parsedData.is_budget_cap_exempt,
+        exempt_project_id: parsedData.project_id || null, // Map the generic project_id to the specific column
         user_id: user.id, 
       })
       .select()
