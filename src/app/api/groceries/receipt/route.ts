@@ -69,7 +69,8 @@ export async function POST(request: Request) {
         raw_subtotal: parsedData.raw_subtotal,
         tax_and_fees: parsedData.tax_and_fees,
         discount_amount: parsedData.discount_amount,
-        final_settled_total: submittedTotal
+        final_settled_total: submittedTotal,
+        receipt_items: parsedData.items
       })
       .select('trip_id')
       .single();

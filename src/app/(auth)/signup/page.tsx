@@ -4,19 +4,21 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
+      // Under the hood, signInWithOtp handles both signup and login in Supabase.
+      // We reuse the same endpoint, but provide distinct UX for registration.
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,17 +55,17 @@ export default function LoginPage() {
           
           <div className="mb-8 text-center space-y-4">
             <h1 className="text-3xl font-bold tracking-tight text-slate-100">
-              Navia
+              Join Navia
             </h1>
             <div className="text-4xl">
-              🔒
+              🗝️
             </div>
             <p className="text-sm text-slate-400 font-medium">
-              Zero-Knowledge Privacy Vault
+              Initialize your Zero-Knowledge Vault
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleSignup} className="space-y-6">
             <div className="space-y-2">
               <label htmlFor="email" className="block text-sm font-medium text-slate-300">
                 Email Address
@@ -88,7 +90,7 @@ export default function LoginPage() {
 
             {success && (
               <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
-                Code dispatched successfully. Redirecting...
+                Verification code dispatched. Redirecting...
               </div>
             )}
 
@@ -97,13 +99,14 @@ export default function LoginPage() {
               disabled={loading || success}
               className="w-full flex items-center justify-center rounded-lg bg-emerald-500 text-slate-950 font-bold py-3 px-4 hover:bg-emerald-400 transition-colors disabled:opacity-70"
             >
-              {loading ? 'Sending Code...' : 'Request Secure Code'}
+              {loading ? 'Sending Code...' : 'Register Account'}
             </button>
           </form>
+
           <div className="mt-6 text-center text-sm text-slate-500">
-            Don't have a vault yet?{' '}
-            <Link href="/signup" className="text-emerald-400 font-medium hover:underline">
-              Initialize one here
+            Already have a vault?{' '}
+            <Link href="/login" className="text-emerald-400 font-medium hover:underline">
+              Authenticate here
             </Link>
           </div>
           

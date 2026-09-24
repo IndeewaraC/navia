@@ -1,50 +1,127 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/src/lib/supabase/client';
 
 interface QuickExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  accountId: string; // Passed down from the selected account card
+  paymentAccounts: { account_id: string; account_alias: string }[];
+  activeProjects?: any[];
 }
 
-export default function QuickExpenseModal({ isOpen, onClose, accountId }: QuickExpenseModalProps) {
+type Merchant = {
+  merchant_id: string;
+  merchant_name: string;
+};
+
+export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [], activeProjects = [] }: QuickExpenseModalProps) {
   const router = useRouter();
+  const supabase = createClient();
+  
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('');
-  const [paymentSource, setPaymentSource] = useState<'CREDIT' | 'DEBIT' | 'CASH'>('CREDIT');
+  
+  // Use Case 7: Merchant Autocomplete State
+  const [merchantInput, setMerchantInput] = useState('');
+  const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [filteredMerchants, setFilteredMerchants] = useState<Merchant[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(
+    paymentAccounts.length > 0 ? paymentAccounts[0].account_id : ''
+  );
+  
   const [isExempt, setIsExempt] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [warning, setWarning] = useState<{ level: string; message: string } | null>(null);
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchMerchants();
+    }
+  }, [isOpen]);
+
+  const fetchMerchants = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Fetch saved Shop List
+    const { data: merchantData } = await supabase
+      .from('user_merchants')
+      .select('merchant_id, merchant_name')
+      .eq('user_id', user.id);
+      
+    if (merchantData) {
+      setMerchants(merchantData);
+      setFilteredMerchants(merchantData);
+    }
+  };
+
+  const handleMerchantInput = (text: string) => {
+    setMerchantInput(text);
+    setFilteredMerchants(
+      merchants.filter(m => m.merchant_name.toLowerCase().includes(text.toLowerCase()))
+    );
+    setShowDropdown(true);
+  };
+
+  const selectMerchant = (name: string) => {
+    setMerchantInput(name);
+    setShowDropdown(false);
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!merchantInput || !amount) return;
+    
     setLoading(true);
     setError('');
     setWarning(null);
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Unauthorized');
+
+      // 1. Auto-provision new merchant if it doesn't exist in the Shop List
+      const existingMerchant = merchants.find(m => m.merchant_name.toLowerCase() === merchantInput.toLowerCase());
+      if (!existingMerchant) {
+        await supabase.from('user_merchants').insert({
+          user_id: user.id,
+          merchant_name: merchantInput.trim(),
+          default_category: 'General'
+        });
+      }
+
+      // 2. Submit Transaction via API to enforce ledger logic (CR-05 ready)
       const res = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          source_account_id: accountId,
+          source_account_id: selectedAccountId,
           txn_type: 'EXPENSE',
           amount: parseFloat(amount),
           transaction_date: new Date().toISOString().split('T')[0],
-          category,
+          category: merchantInput.trim(),
           is_budget_cap_exempt: isExempt,
+          project_id: isExempt && selectedProjectId ? selectedProjectId : undefined,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || 'Failed to log expense');
+
+      // 3. Reset State & Close
+      setAmount('');
+      setMerchantInput('');
+      setIsExempt(false);
+      setSelectedProjectId('');
 
       // Check for Navia Dual-Layer alerts (80% or 100% operational breach)
       if (data.threshold_alert) {
@@ -113,41 +190,66 @@ export default function QuickExpenseModal({ isOpen, onClose, accountId }: QuickE
             </div>
           </div>
 
-          {/* Description/Category */}
-          <div className="space-y-2 group">
+          {/* Autocomplete Merchant Input (Use Case 7) */}
+          <div className="space-y-2 group relative">
             <label className="block text-sm font-semibold text-slate-300 transition-colors group-focus-within:text-emerald-400">
-              Description
+              Merchant / Description
             </label>
             <input
               type="text"
               required
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              value={merchantInput}
+              onChange={(e) => handleMerchantInput(e.target.value)}
+              onFocus={() => setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
               disabled={loading}
               className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              placeholder="e.g. DoorDash Karachi Darbar, Mitsubishi RVR Fuel..."
+              placeholder="Merchant or Shop..."
+              autoComplete="off"
             />
+            {showDropdown && merchantInput && (
+              <div className="absolute z-10 w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                {filteredMerchants.length > 0 ? (
+                  filteredMerchants.map((m) => (
+                    <div
+                      key={m.merchant_id}
+                      onClick={() => selectMerchant(m.merchant_name)}
+                      className="px-4 py-3 hover:bg-slate-800 cursor-pointer text-slate-200 transition-colors"
+                    >
+                      {m.merchant_name}
+                    </div>
+                  ))
+                ) : (
+                  <div
+                    onClick={() => selectMerchant(merchantInput)}
+                    className="px-4 py-3 hover:bg-slate-800 cursor-pointer text-emerald-400 text-sm font-medium transition-colors"
+                  >
+                    + Add "{merchantInput}" to Shop List
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* 3-Tier Payment Selector */}
+          {/* Dynamic Payment Selector */}
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-slate-300">
               Funding Source
             </label>
-            <div className="grid grid-cols-3 gap-3">
-              {['CREDIT', 'DEBIT', 'CASH'].map((source) => (
+            <div className="flex flex-wrap gap-3">
+              {paymentAccounts.map((account) => (
                 <button
-                  key={source}
+                  key={account.account_id}
                   type="button"
-                  onClick={() => setPaymentSource(source as 'CREDIT' | 'DEBIT' | 'CASH')}
+                  onClick={() => setSelectedAccountId(account.account_id)}
                   disabled={loading}
-                  className={`py-3 rounded-lg font-bold text-sm transition-colors border ${
-                    paymentSource === source
+                  className={`py-2 px-4 rounded-lg font-bold text-sm transition-colors border flex-1 min-w-[100px] ${
+                    selectedAccountId === account.account_id
                       ? 'bg-indigo-500/20 border-indigo-500 text-indigo-400'
                       : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-500'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  {source}
+                  {account.account_alias}
                 </button>
               ))}
             </div>
@@ -174,6 +276,25 @@ export default function QuickExpenseModal({ isOpen, onClose, accountId }: QuickE
               </p>
             </div>
           </div>
+
+          {isExempt && activeProjects.length > 0 && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+              <label className="block text-sm font-semibold text-slate-300">
+                Link to Vault Project
+              </label>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                disabled={loading}
+                className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed appearance-none"
+              >
+                <option value="">-- No specific project --</option>
+                {activeProjects.map(p => (
+                  <option key={p.project_id} value={p.project_id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Dynamic Alerts */}
           {error && (

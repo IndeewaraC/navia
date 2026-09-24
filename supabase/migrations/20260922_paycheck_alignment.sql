@@ -20,9 +20,9 @@ BEGIN
         RETURN json_build_object('error', 'Anchor pay date not configured');
     END IF;
 
-    -- Calculate current 14-day window
+    -- Calculate current 14-day window using numeric division to prevent truncation towards zero
     v_days_since_anchor := v_current_date - v_anchor_date;
-    v_cycles_passed := FLOOR(v_days_since_anchor / 14);
+    v_cycles_passed := FLOOR(v_days_since_anchor::NUMERIC / 14.0);
     
     v_cycle_start := v_anchor_date + (v_cycles_passed * 14);
     v_cycle_end := v_cycle_start + 13;

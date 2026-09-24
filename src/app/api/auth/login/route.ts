@@ -22,14 +22,13 @@ export async function POST(request: Request) {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        shouldCreateUser: false, 
+        shouldCreateUser: true, 
       },
     });
 
     if (error) {
-      // Return a generic error to prevent account enumeration
       console.error('OTP Dispatch Error:', error.message);
-      return NextResponse.json({ error: 'If this account exists, an OTP has been dispatched.' }, { status: 400 });
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     return NextResponse.json({ message: 'OTP dispatched successfully. Awaiting verification.' }, { status: 200 });
