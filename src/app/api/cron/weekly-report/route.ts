@@ -2,16 +2,15 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-// We use the Service Role Key here because this is a system-level background job
-// operating outside of a specific user's active browser session.
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function GET(request: Request) {
+  // Initialize clients inside the handler to prevent build-time crashes
+  // when environment variables are not injected during static analysis.
+  const resend = new Resend(process.env.RESEND_API_KEY || 'dummy_key');
+  
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_key'
+  );
   // 1. Secure the Cron Endpoint
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
