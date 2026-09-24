@@ -9,16 +9,14 @@ export default async function DashboardPage() {
 
   if (!user) return null; // Middleware handles the redirect
 
-  // 1. Fetch Primary Account details (for limits)
-  let { data: account } = await supabase
+  // 1. Fetch ALL Payment Accounts
+  let { data: accounts } = await supabase
     .from('payment_accounts')
     .select('account_id, account_alias, routine_monthly_limit')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
+    .eq('user_id', user.id);
 
-  // Auto-create a default checking account if the user doesn't have one (for new users)
-  if (!account) {
+  // Auto-create a default checking account if the user doesn't have any (for new users)
+  if (!accounts || accounts.length === 0) {
     const { data: newAccount } = await supabase
       .from('payment_accounts')
       .insert({
@@ -31,7 +29,9 @@ export default async function DashboardPage() {
       .select('account_id, account_alias, routine_monthly_limit')
       .single();
     
-    account = newAccount;
+    if (newAccount) {
+      accounts = [newAccount];
+    }
   }
 
   // Fetch active projects for the FAB dropdown
@@ -72,7 +72,8 @@ export default async function DashboardPage() {
   }
 
   // Calculate Dual-Layer Gauge logic
-  const limit = account?.routine_monthly_limit || 1000; // Fallback for UI display
+  // Use the sum of all monthly limits
+  const limit = (accounts || []).reduce((acc, account) => acc + (account.routine_monthly_limit || 0), 0) || 1000;
   const spendPercentage = Math.min((operationalSpend / limit) * 100, 100);
   
   let progressColor = 'bg-emerald-400';
@@ -105,7 +106,7 @@ export default async function DashboardPage() {
       </section>
 
       {/* Early Cycle Warning Injection */}
-      {cycleData && cycleData.is_magic_month && account && (
+      {cycleData && cycleData.is_magic_month && (accounts || []).length > 0 && (
         <EarlyCycleWarnings userId={user.id} />
       )}
 
@@ -138,9 +139,9 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* Pass the account ID and active projects to the FAB so it can process transactions */}
+      {/* Pass all accounts and active projects to the FAB so it can process transactions */}
       <QuickExpenseFAB 
-        accountId={account?.account_id || '00000000-0000-0000-0000-000000000000'} 
+        paymentAccounts={accounts || []} 
         activeProjects={activeProjects || []} 
       />
     </div>

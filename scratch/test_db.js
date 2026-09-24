@@ -9,27 +9,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY 
 );
 
-async function createAccount() {
-  console.log('Fetching users...');
-  const { data: users } = await supabase.auth.admin.listUsers();
-  
-  if (users?.users?.length > 0) {
-    const userId = users.users[0].id;
-    
-    const { data, error } = await supabase
-      .from('payment_accounts')
-      .insert({
-        user_id: userId,
-        account_alias: 'Primary Checking',
-        account_type: 'DEBIT',
-        current_statement_balance: 10000.00,
-        routine_monthly_limit: 1000
-      })
-      .select();
-
-    console.log('Error:', error);
-    console.log('Created Account:', data);
-  }
+async function checkTable() {
+  const { data, error } = await supabase.from('user_merchants').select('*').limit(1);
+  console.log('Error:', error);
 }
 
-createAccount();
+checkTable();
