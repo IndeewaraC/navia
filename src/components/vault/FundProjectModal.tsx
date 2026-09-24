@@ -92,10 +92,7 @@ export default function FundProjectModal({ project, checkingAccount, onClose, on
 
         <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
           <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Available in Checking:</span>
-              <span className="font-bold text-emerald-400">${checkingBalance.toFixed(2)}</span>
-            </div>
+
             <div className="flex justify-between text-sm">
               <span className="text-slate-400">Remaining needed for goal:</span>
               <span className="font-bold text-indigo-400">${remainingNeeded.toFixed(2)}</span>

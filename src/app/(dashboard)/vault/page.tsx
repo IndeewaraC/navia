@@ -18,7 +18,7 @@ export default async function VaultPage() {
   // Fetch the user's designated Emergency / Vault account
   const { data: vaultAccount } = await supabase
     .from('payment_accounts')
-    .select('account_id, account_alias, current_balance')
+    .select('account_id, account_alias, current_statement_balance')
     .eq('user_id', user.id)
     .ilike('account_alias', '%vault%')
     .limit(1)
@@ -27,7 +27,7 @@ export default async function VaultPage() {
   // Fetch primary checking account (for funding projects)
   const { data: checkingAccount } = await supabase
     .from('payment_accounts')
-    .select('account_id, current_balance')
+    .select('account_id, current_statement_balance')
     .eq('user_id', user.id)
     .ilike('account_alias', '%checking%')
     .limit(1)

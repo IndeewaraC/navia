@@ -7,8 +7,15 @@ export interface GroceryItem {
   isChecked: boolean;
 }
 
-export function useOfflineGroceryDraft(tripId: string, initialDraft: GroceryItem[] = []) {
+export interface GroceryDraftPayload {
+  storeName: string;
+  items: GroceryItem[];
+  lastUpdated: number;
+}
+
+export function useOfflineGroceryDraft(tripId: string, initialDraft: GroceryItem[] = [], initialStoreName: string = 'Local Supermarket') {
   const [items, setItems] = useState<GroceryItem[]>(initialDraft);
+  const [storeName, setStoreName] = useState<string>(initialStoreName);
   const [isOffline, setIsOffline] = useState(false);
   const [pendingSync, setPendingSync] = useState(false);
 
@@ -18,8 +25,22 @@ export function useOfflineGroceryDraft(tripId: string, initialDraft: GroceryItem
 
     const cachedDraft = localStorage.getItem(`navia_grocery_draft_${tripId}`);
     if (cachedDraft) {
-      setItems(JSON.parse(cachedDraft));
-      setPendingSync(true); // Flag that local data exists and needs eventual sync
+      try {
+        const parsed = JSON.parse(cachedDraft);
+        // Migration: If it's the old array format, convert it
+        if (Array.isArray(parsed)) {
+          setItems(parsed);
+          setStoreName('Local Supermarket');
+          setPendingSync(true);
+        } else {
+          // New object format
+          setItems(parsed.items || []);
+          setStoreName(parsed.storeName || 'Local Supermarket');
+          setPendingSync(true);
+        }
+      } catch (e) {
+        console.error('Failed to parse offline draft', e);
+      }
     } else if (initialDraft.length > 0) {
       setItems(initialDraft);
     }
@@ -36,20 +57,31 @@ export function useOfflineGroceryDraft(tripId: string, initialDraft: GroceryItem
     };
   }, [tripId, initialDraft]);
 
+  const saveToStorage = useCallback((currentStoreName: string, currentItems: GroceryItem[]) => {
+    const payload: GroceryDraftPayload = {
+      storeName: currentStoreName,
+      items: currentItems,
+      lastUpdated: Date.now()
+    };
+    localStorage.setItem(`navia_grocery_draft_${tripId}`, JSON.stringify(payload));
+    setPendingSync(true);
+  }, [tripId]);
+
+  const updateStoreName = useCallback((newName: string) => {
+    setStoreName(newName);
+    saveToStorage(newName, items);
+  }, [items, saveToStorage]);
+
   // Atomic update function that immediately writes to disk
   const updateItem = useCallback((id: string, updates: Partial<GroceryItem>) => {
     setItems((prevItems) => {
       const nextState = prevItems.map(item => 
         item.id === id ? { ...item, ...updates } : item
       );
-      
-      // Persist to local storage instantly so progress survives app crashes or reloads
-      localStorage.setItem(`navia_grocery_draft_${tripId}`, JSON.stringify(nextState));
-      setPendingSync(true);
-      
+      saveToStorage(storeName, nextState);
       return nextState;
     });
-  }, [tripId]);
+  }, [storeName, saveToStorage]);
 
   // Clear cache post-sync
   const clearDraft = useCallback(() => {
@@ -66,27 +98,27 @@ export function useOfflineGroceryDraft(tripId: string, initialDraft: GroceryItem
         isChecked: false
       };
       const nextState = [...prevItems, newItem];
-      localStorage.setItem(`navia_grocery_draft_${tripId}`, JSON.stringify(nextState));
-      setPendingSync(true);
+      saveToStorage(storeName, nextState);
       return nextState;
     });
-  }, [tripId]);
+  }, [storeName, saveToStorage]);
 
   const removeItem = useCallback((id: string) => {
     setItems((prevItems) => {
       const nextState = prevItems.filter(item => item.id !== id);
-      localStorage.setItem(`navia_grocery_draft_${tripId}`, JSON.stringify(nextState));
-      setPendingSync(true);
+      saveToStorage(storeName, nextState);
       return nextState;
     });
-  }, [tripId]);
+  }, [storeName, saveToStorage]);
 
   // Real-time subtotal calculation powered by the cached state
   const rawSubtotal = items
     .reduce((sum, item) => sum + item.shelfPrice, 0);
 
   return { 
-    items, 
+    items,
+    storeName,
+    updateStoreName,
     updateItem, 
     addItem,
     removeItem,

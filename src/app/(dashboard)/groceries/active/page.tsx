@@ -6,7 +6,11 @@ export const metadata = {
   title: 'Active Trip | Navia',
 };
 
-export default async function ActiveGroceryTripPage() {
+export default async function ActiveGroceryTripPage({ 
+  searchParams 
+}: { 
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }> 
+}) {
   const supabase = await createClient();
   const { data: { user }, error } = await supabase.auth.getUser();
 
@@ -41,25 +45,20 @@ export default async function ActiveGroceryTripPage() {
     accountId = newAccount?.account_id || '00000000-0000-0000-0000-000000000000';
   }
 
-  // Generate a mock trip ID for local session
-  const mockTripId = `trip_${Date.now()}`;
-
-  // Pre-seed some items to demonstrate the offline functionality
-  const initialItems = [
-    { id: 'item1', name: 'Almond Milk (Unsweetened)', shelfPrice: 0, isChecked: false },
-    { id: 'item2', name: 'Free-Range Eggs (12-pack)', shelfPrice: 0, isChecked: false },
-    { id: 'item3', name: 'Avocados (Bag of 5)', shelfPrice: 0, isChecked: false },
-    { id: 'item4', name: 'Sourdough Bread', shelfPrice: 0, isChecked: false },
-    { id: 'item5', name: 'Organic Spinach', shelfPrice: 0, isChecked: false },
-  ];
+  const params = await searchParams;
+  let tripIdParam = params.tripId;
+  if (Array.isArray(tripIdParam)) {
+    tripIdParam = tripIdParam[0];
+  }
+  const activeTripId = tripIdParam || `trip_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   return (
     <div className="min-h-screen bg-slate-950 pt-8 pb-32 px-4 sm:px-6 flex items-start justify-center">
       <GroceryChecklist 
-        tripId={mockTripId}
+        tripId={activeTripId}
         storeName="Local Supermarket"
         accountId={accountId}
-        initialItems={initialItems}
+        initialItems={[]}
       />
     </div>
   );

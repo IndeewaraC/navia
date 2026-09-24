@@ -65,8 +65,11 @@ export default function SettingsPage() {
     setLoading(true);
     await supabase
       .from('profiles')
-      .update({ anchor_pay_date: anchorDate })
-      .eq('id', userId);
+      .upsert({ 
+        id: userId, 
+        anchor_pay_date: anchorDate,
+        username: userEmail.split('@')[0]
+      });
     setLoading(false);
     alert('Pay cycle anchor date updated.');
   };
@@ -107,6 +110,22 @@ export default function SettingsPage() {
         ? { ...acc, account_alias: updatedAlias, routine_monthly_limit: updatedLimit } 
         : acc
     ));
+  };
+
+  const handleDeleteAccount = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this payment method?')) return;
+    setLoading(true);
+    const { error } = await supabase
+      .from('payment_accounts')
+      .delete()
+      .eq('account_id', id);
+      
+    if (!error) {
+      setAccounts(prev => prev.filter(acc => acc.account_id !== id));
+    } else {
+      alert('Failed to delete payment method.');
+    }
+    setLoading(false);
   };
 
   const handleLogout = async () => {
@@ -189,7 +208,14 @@ export default function SettingsPage() {
 
           <div className="space-y-4">
             {accounts.map((acc) => (
-              <div key={acc.account_id} className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
+              <div key={acc.account_id} className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 relative pr-12">
+                <button 
+                  onClick={() => handleDeleteAccount(acc.account_id)}
+                  className="absolute top-4 right-4 text-slate-500 hover:text-red-400 transition-colors"
+                  title="Delete Account"
+                >
+                  🗑️
+                </button>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Account Alias</label>
                   <input
