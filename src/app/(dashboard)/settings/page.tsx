@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [anchorDate, setAnchorDate] = useState('');
   
   // Payment Accounts State
@@ -32,15 +33,16 @@ export default function SettingsPage() {
         setUserId(user.id);
         setUserEmail(user.email || '');
         
-        // Load Anchor Date
+        // Load Anchor Date & Display Name
         const { data: profile } = await supabase
           .from('profiles')
-          .select('anchor_pay_date')
+          .select('anchor_pay_date, display_name')
           .eq('id', user.id)
           .single();
         
-        if (profile?.anchor_pay_date) {
-          setAnchorDate(profile.anchor_pay_date);
+        if (profile) {
+          if (profile.anchor_pay_date) setAnchorDate(profile.anchor_pay_date);
+          if (profile.display_name) setDisplayName(profile.display_name);
         }
 
         // Load Payment Accounts
@@ -60,7 +62,7 @@ export default function SettingsPage() {
     if (data) setAccounts(data as PaymentAccount[]);
   };
 
-  const handleSaveAnchorDate = async () => {
+  const handleSaveConfig = async () => {
     if (!userId) return;
     setLoading(true);
     await supabase
@@ -68,10 +70,11 @@ export default function SettingsPage() {
       .upsert({ 
         id: userId, 
         anchor_pay_date: anchorDate,
+        display_name: displayName,
         username: userEmail.split('@')[0]
       });
     setLoading(false);
-    alert('Pay cycle anchor date updated.');
+    alert('Profile configuration updated.');
   };
 
   const handleAddAccount = async () => {
@@ -163,6 +166,17 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-bold text-slate-300 mb-2">
+                Display Name
+              </label>
+              <input
+                type="text"
+                placeholder="How should Navia call you?"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors mb-6"
+              />
+
+              <label className="block text-sm font-bold text-slate-300 mb-2">
                 Anchor Pay Date
               </label>
               <p className="text-xs text-slate-500 mb-4 leading-relaxed">
@@ -177,7 +191,7 @@ export default function SettingsPage() {
             </div>
 
             <button
-              onClick={handleSaveAnchorDate}
+              onClick={handleSaveConfig}
               disabled={loading}
               className="w-full flex items-center justify-center rounded-xl bg-slate-800 text-slate-100 font-bold py-3 px-4 hover:bg-slate-700 transition-colors border border-slate-700 hover:border-slate-600 disabled:opacity-50"
             >
