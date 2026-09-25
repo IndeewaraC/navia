@@ -10,6 +10,7 @@ export default function BottomNav() {
   const navItems = [
     { name: 'Ledger', href: '/ledger', icon: '💳' },
     { name: 'Groceries', href: '/groceries', icon: '🛒' },
+    { name: 'History', href: '/history', icon: '📜' },
     { name: 'Vault', href: '/vault', icon: '🏦' }, 
     { name: 'Settings', href: '/settings', icon: '⚙️' },
   ];
