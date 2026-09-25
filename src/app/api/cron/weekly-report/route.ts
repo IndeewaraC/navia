@@ -1,12 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
 export async function GET(request: Request) {
-  // Initialize clients inside the handler to prevent build-time crashes
-  // when environment variables are not injected during static analysis.
-  const resend = new Resend(process.env.RESEND_API_KEY || 'dummy_key');
-  
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost',
     process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_key'
@@ -44,11 +47,11 @@ export async function GET(request: Request) {
         
       const weeklySpend = transactions?.reduce((sum, txn) => sum + Number(txn.amount), 0) || 0;
       
-      // 4. Send the Email via Resend
-      await resend.emails.send({
-        from: 'Navia Vault <reports@navia.app>',
+      // 4. Send the Email via Gmail SMTP
+      await transporter.sendMail({
+        from: `"Navia Engine" <${process.env.GMAIL_USER}>`,
         to: profile.email,
-        subject: 'Your Weekly Survival Runway',
+        subject: 'Your Navia Weekly Stability Report',
         html: `
           <h1>Navia Weekly Summary</h1>
           <p>Hi ${profile.display_name || 'there'},</p>
