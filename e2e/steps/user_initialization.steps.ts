@@ -14,8 +14,15 @@ const adminAuthClient = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
 
-async function provisionTestUser(userName: string) {
-  const email = `test-${userName}-${Date.now()}@example.com`;
+async function provisionTestUser(userName: string, baseEmail?: string) {
+  let email: string;
+  if (baseEmail && baseEmail.includes('@')) {
+    // Convert 'example@gmail.com' to 'example+standarduser_12345@gmail.com'
+    const [localPart, domain] = baseEmail.split('@');
+    email = `${localPart}+${userName.toLowerCase()}_${Date.now()}@${domain}`;
+  } else {
+    email = `test-${userName}-${Date.now()}@example.com`;
+  }
   const password = 'password123';
 
   const { data: user, error: createError } = await adminAuthClient.auth.admin.createUser({
@@ -56,8 +63,9 @@ Given('I initialize the test user {string} from the global fixture', async funct
     throw new Error(`User configuration for "${userKey}" not found in testUsers.json`);
   }
 
-  // 2. Provision the Auth User (dynamically creates an email and gets a session cookie)
-  const { userId, cookieString } = await provisionTestUser(userKey);
+  // 2. Provision the Auth User (dynamically creates an email using the JSON prefix)
+  const baseEmail = userData.emailAliasPrefix;
+  const { userId, cookieString } = await provisionTestUser(userKey, baseEmail);
   this.testUserId = userId;
   this.cookieString = cookieString;
 

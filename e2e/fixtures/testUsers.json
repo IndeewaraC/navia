@@ -1,5 +1,6 @@
 {
   "StandardUser": {
+    "emailAliasPrefix": "indeewaraappleiphone11@gmail.com",
     "paymentOptions": [
       {
         "account_alias": "Primary Checking",
@@ -19,6 +20,7 @@
     ]
   },
   "PremiumUser": {
+    "emailAliasPrefix": "indeewaraappleiphone11@gmail.com",
     "paymentOptions": [
       {
         "account_alias": "Wealth Checking",
