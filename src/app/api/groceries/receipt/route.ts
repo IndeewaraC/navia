@@ -41,29 +41,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Log the Master Transaction (Operational Spend)
-    const { data: transaction, error: txnError } = await supabase
-      .from('transactions')
-      .insert({
-        user_id: user.id,
-        source_account_id: parsedData.source_account_id,
-        txn_type: 'EXPENSE',
-        amount: submittedTotal,
-        transaction_date: parsedData.trip_date,
-        category: `Grocery Run - ${parsedData.store_name}`,
-        is_budget_cap_exempt: false, // Groceries are strictly operational survival costs
-      })
-      .select('transaction_id')
-      .single();
-
-    if (txnError) throw new Error('Failed to route grocery cost to ledger.');
+    // 2. We no longer auto-insert into `transactions`. 
+    // The Grocery module is for reporting and receipt tracking only.
 
     // 3. Log the Grocery Trip Details
     const { data: trip, error: tripError } = await supabase
       .from('grocery_trips')
       .insert({
         user_id: user.id,
-        transaction_id: transaction.transaction_id,
         trip_date: parsedData.trip_date,
         store_name: parsedData.store_name,
         raw_subtotal: parsedData.raw_subtotal,

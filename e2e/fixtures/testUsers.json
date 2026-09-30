@@ -1,0 +1,37 @@
+{
+  "StandardUser": {
+    "emailAliasPrefix": "indeewaraappleiphone11@gmail.com",
+    "paymentOptions": [
+      {
+        "account_alias": "Primary Checking",
+        "account_type": "DEBIT",
+        "current_statement_balance": 2000.00
+      },
+      {
+        "account_alias": "Everyday Visa",
+        "account_type": "CREDIT",
+        "routine_monthly_limit": 1500.00
+      },
+      {
+        "account_alias": "MasterCard",
+        "account_type": "CREDIT",
+        "routine_monthly_limit": 2000.00
+      }
+    ]
+  },
+  "PremiumUser": {
+    "emailAliasPrefix": "indeewaraappleiphone11@gmail.com",
+    "paymentOptions": [
+      {
+        "account_alias": "Wealth Checking",
+        "account_type": "DEBIT",
+        "current_statement_balance": 1500.00
+      },
+      {
+        "account_alias": "Platinum Credit",
+        "account_type": "CREDIT",
+        "routine_monthly_limit": 3000.00
+      }
+    ]
+  }
+}

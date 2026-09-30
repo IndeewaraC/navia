@@ -12,4 +12,4 @@ Feature: Offline Grocery Synchronization
     And the data must be securely saved in the device's local storage
     When the device regains network connection
     Then the checkout button should be re-enabled
-    And submitting the receipt should successfully route the total to the ledger
+    And submitting the receipt should successfully saved in the Grocery page.

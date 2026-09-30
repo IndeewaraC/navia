@@ -23,6 +23,15 @@ export default async function DashboardPage() {
     .select('project_id, name')
     .eq('user_id', user.id);
 
+  // Fetch the User's Profile for the Display Name
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id)
+    .single();
+    
+  const dashboardTitle = profile?.display_name ? `${profile.display_name}'s Vault` : 'Command Center';
+
   // 2. Fetch Active Cycle Status
   const { data: cycleData } = await supabase.rpc('get_pay_cycle_status', { p_user_id: user.id });
 
@@ -77,7 +86,7 @@ export default async function DashboardPage() {
   return (
     <div className="p-4 md:p-6 max-w-xl mx-auto space-y-6 pt-8">
       <header className="mb-8">
-        <h1 className="text-2xl font-black tracking-tight text-slate-100">Command Center</h1>
+        <h1 className="text-2xl font-black tracking-tight text-slate-100">{dashboardTitle}</h1>
         <p className="text-slate-400 font-medium text-sm">Active Cycle Overview</p>
       </header>
 

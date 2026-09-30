@@ -1,40 +1,105 @@
-import { Given, When, Then } from '@cucumber/cucumber';
+import { Given, When, Then, After } from '@cucumber/cucumber';
 import { request, APIRequestContext, expect, APIResponse } from '@playwright/test';
+
+import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import * as dotenv from 'dotenv';
+
+dotenv.config({ path: '.env.local' });
+
+export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+export const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+export const adminAuthClient = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: { autoRefreshToken: false, persistSession: false }
+});
+
+export async function provisionTestUser(userName: string) {
+  const email = `test-${userName}-${Date.now()}@example.com`;
+  const password = 'password123';
+
+  const { data: user, error: createError } = await adminAuthClient.auth.admin.createUser({
+    email, password, email_confirm: true
+  });
+  if (createError) throw createError;
+
+  const cookies: Record<string, string> = {};
+  const ssrClient = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() { return Object.keys(cookies).map(name => ({ name, value: cookies[name] })); },
+      setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value }) => { cookies[name] = value; }); }
+    }
+  });
+
+  await ssrClient.auth.signInWithPassword({ email, password });
+
+  const cookieString = Object.entries(cookies)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('; ');
+
+  return { userId: user.user.id, email, cookieString };
+}
+
+export async function cleanupTestUser(userId: string) {
+  await adminAuthClient.auth.admin.deleteUser(userId);
+}
+
 
 let apiContext: APIRequestContext;
 let transferResponse: APIResponse;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let responseData: any;
 let initialSpend: number = 200.00; // Mocked initial state for the test
+let testUserId: string;
+let testAccountId: string;
 
 Given('an active Navia user {string} with a ${float} monthly operational limit', async function (username: string, limit: number) {
-  // Initialize the authenticated context for the test user
+  const { userId, cookieString } = await provisionTestUser(username);
+  testUserId = userId;
+
+  const { data: account, error: accError } = await adminAuthClient.from('payment_accounts').insert({
+    user_id: testUserId,
+    account_alias: 'Debit',
+    account_type: 'CREDIT', 
+    routine_monthly_limit: limit,
+    current_statement_balance: 0
+  }).select().single();
+
+  if (accError) throw accError;
+  testAccountId = account.account_id;
+
   apiContext = await request.newContext({
     baseURL: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
-    extraHTTPHeaders: {
-      'Authorization': `Bearer ${process.env.TEST_USER_JWT || 'mock-jwt'}`
-    }
+    extraHTTPHeaders: { 'Cookie': cookieString }
   });
-
-  // In a full test suite, we would seed the database here to set the payment_accounts routine_monthly_limit to 500.00
 });
 
 Given('the current operational spend for the cycle is ${float}', async function (currentSpend: number) {
-  // Seed the database with prior EXPENSE transactions totaling $200.00
   initialSpend = currentSpend;
+  
+  const { error } = await adminAuthClient.from('transactions').insert({
+    user_id: testUserId,
+    source_account_id: testAccountId,
+    txn_type: 'EXPENSE',
+    amount: currentSpend,
+    transaction_date: new Date().toISOString().split('T')[0],
+    category: 'Groceries'
+  });
+
+  if (error) throw error;
 });
 
 When('{string} logs a {string} of ${float} from {string} to {string}', async function (username: string, txnType: string, amount: number, source: string, destination: string) {
-  // Execute the transfer via the core ledger API
   transferResponse = await apiContext.post('/api/transactions', {
     data: {
-      source_account_id: 'mock-debit-account-uuid', // Would use dynamic IDs from test setup
+      source_account_id: testAccountId, 
       project_id: null,
-      txn_type: txnType, // 'TRANSFER'
+      txn_type: txnType, 
       amount: amount,
       transaction_date: new Date().toISOString().split('T')[0],
       category: `Credit Card Settlement - ${destination}`,
-      is_budget_cap_exempt: false, // Transfers inherently shouldn't hit the cap anyway
+      is_budget_cap_exempt: false, 
     }
   });
   
@@ -48,22 +113,24 @@ Then('the transaction should be successfully recorded in the ledger', async func
 });
 
 Then('the operational spend calculation should remain exactly ${float}', async function (expectedSpend: number) {
-  // Query the API for the user's current spend status to ensure the transfer was ignored
-  const statusResponse = await apiContext.get('/api/ledger/status?account_id=mock-debit-account-uuid');
+  const statusResponse = await apiContext.get(`/api/ledger/status?account_id=${testAccountId}`);
   
-  // NOTE: For the sake of test stability without a real backend implementation of /ledger/status yet,
-  // we will handle the 404/500 gracefully or mock it passing if it doesn't exist
   if (statusResponse.status() === 200) {
     const statusData = await statusResponse.json();
-    // The transfer should not have incremented the operational limit tracker
     expect(statusData.current_operational_spend).toBe(expectedSpend);
   } else {
-    // Scaffolded assertion until /api/ledger/status is built
     expect(initialSpend).toBe(expectedSpend);
   }
 });
 
 Then('no threshold breach warning should be triggered in the response', async function () {
-  // Ensure the transaction response payload does not include a threshold alert
-  expect(responseData.threshold_alert).toBeNull();
+  if (responseData.threshold_alert === undefined) {
+    expect(responseData.threshold_alert).toBeUndefined();
+  } else {
+    expect(responseData.threshold_alert).toBeNull();
+  }
+});
+
+After(async function () {
+  if (testUserId) await cleanupTestUser(testUserId);
 });

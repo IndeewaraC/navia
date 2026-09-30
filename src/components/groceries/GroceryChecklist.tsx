@@ -59,7 +59,7 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
       if (!res.ok) throw new Error(data.error);
 
       clearDraft();
-      router.push('/ledger');
+      router.push('/groceries');
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -216,7 +216,7 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
         )}
 
         <button
-          onClick={finalTotal > 0 ? handleCheckout : () => router.push('/ledger')}
+          onClick={finalTotal > 0 ? handleCheckout : () => router.push('/groceries')}
           disabled={loading || (finalTotal > 0 && isOffline)}
           className={`mt-6 w-full flex items-center justify-center rounded-xl font-bold py-4 px-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
             finalTotal > 0
@@ -233,7 +233,7 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
                Settling Receipt...
              </>
           ) : finalTotal > 0 ? (
-            'Confirm & Log to Ledger'
+            'Save Receipt'
           ) : (
             'Save List for Later'
           )}
