@@ -1,6 +1,7 @@
 import { createClient } from '@/src/lib/supabase/server';
 import EarlyCycleWarnings from '@/src/components/dashboard/EarlyCycleWarnings';
 import QuickExpenseFAB from '@/src/components/dashboard/QuickExpenseFAB';
+import MagicMonthBanner from '@/src/components/dashboard/MagicMonthBanner';
 
 export default async function DashboardPage() {
   // Await createClient() as mandated by Next.js 15+ cookies() async restrictions
@@ -89,6 +90,8 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-black tracking-tight text-slate-100">{dashboardTitle}</h1>
         <p className="text-slate-400 font-medium text-sm">Active Cycle Overview</p>
       </header>
+
+      <MagicMonthBanner isMagicMonth={cycleData?.is_magic_month || false} />
 
       {/* Spend Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
