@@ -6,14 +6,14 @@ Feature: User Authentication and OTP Verification
   @auth @signup
   Scenario: Initial Signup with a valid email
     Given an unregistered user navigates to the "Signup" page
-    When they enter a valid email address "newuser@example.com"
+    When they enter a valid email address
     And they submit the signup form
     Then they should be prompted to enter an OTP sent to their email
 
   @auth @otp @signup
   Scenario: Signup verification with Valid OTP
     Given a user has received an OTP for signup
-    When they enter the valid OTP "123456"
+    When they enter the valid OTP
     And submit the OTP form
     Then their account should be created successfully
     And they should be navigated to the "Ledger" page
@@ -21,27 +21,27 @@ Feature: User Authentication and OTP Verification
   @auth @otp @signup
   Scenario: Signup verification with Invalid OTP
     Given a user has received an OTP for signup
-    When they enter an invalid OTP "000000"
+    When they enter an invalid OTP
     And submit the OTP form
-    Then they should see an error message "Invalid or expired OTP"
+    Then they should see an error message for invalid signup OTP
     And they should remain on the OTP verification page
 
   @auth @login
   Scenario: Login verification with Valid OTP
-    Given a registered user "existinguser@example.com" requests a login OTP
+    Given a registered user requests a login OTP
     When they navigate to the OTP verification step
-    And they enter the valid OTP "654321"
+    And they enter the valid OTP
     And submit the OTP form
     Then they should be successfully authenticated
     And they should be navigated to the "Ledger" page
 
   @auth @login
   Scenario: Login verification with Invalid OTP
-    Given a registered user "existinguser@example.com" requests a login OTP
+    Given a registered user requests a login OTP
     When they navigate to the OTP verification step
-    And they enter an invalid OTP "111111"
+    And they enter an invalid OTP
     And submit the OTP form
-    Then they should see an error message "Invalid OTP code"
+    Then they should see an error message for invalid login OTP
     And their session should not be authenticated
 
   @navigation @post-login
