@@ -1,3 +1,21 @@
+Navia Engine ⚡️
+Navia is a privacy-first, self-managed financial tracking web application. Built on the concept of a "Zero-Trust Privacy Vault," it empowers users to manually track their daily operational expenses, manage multi-stop grocery lists, and allocate funds to custom savings goals without ever linking to a real-world bank account or sacrificing sensitive data.
+
+Whether you want to stop overspending on credit cards, avoid "checkout shock" at the grocery store, or simply take manual ownership of your financial history, Navia provides a clean, visual command center to keep your spending on track.
+
+Core Features
+Zero Bank Integrations: Absolute privacy. You manage your ledger manually; no bank logins, no external syncing, and no scraped data. You can even use dummy names for ultimate anonymity.
+
+Custom Payment Methods: Define your own funding sources (e.g., Everyday Rewards Card, Cash Wallet) and set strict routine monthly limits for each.
+
+Dual-Layer Budgeting: Visually track your daily "safe-to-spend" runway via a live color-coded gauge (Emerald → Amber → Rose) independently from your fixed bills.
+
+Offline-Ready Groceries: Build shopping lists, track per-item prices, and monitor your cart total in real-time, even in supermarket cell reception dead zones.
+
+The Stability Vault: Shield funds for long-term goals or unexpected expenses (like car repairs) from your daily operational budget using exempt projects.
+
+Magic Month Routing: Automated detection for 3-paycheck bi-weekly cycles to help you route surplus funds directly to your emergency goals.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
