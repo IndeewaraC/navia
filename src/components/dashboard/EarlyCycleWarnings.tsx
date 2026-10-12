@@ -63,28 +63,6 @@ export default function EarlyCycleWarnings({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-4 font-sans">
-      {/* Magic Month Banner */}
-      {cycle.is_magic_month && (
-        <div className="relative overflow-hidden bg-indigo-950/40 border border-indigo-500/30 p-6 rounded-2xl shadow-lg transition-all hover:border-indigo-500/50">
-          <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-indigo-500/20 rounded-full mix-blend-screen filter blur-2xl animate-pulse" />
-          
-          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-            <div className="space-y-1.5">
-              <h3 className="text-xl font-bold tracking-tight text-indigo-100 flex items-center gap-2">
-                <span>✨</span> Magic Month Detected
-              </h3>
-              <p className="text-sm text-indigo-200/80 font-medium leading-relaxed max-w-md">
-                You receive 3 paychecks this month. Route the surplus to your emergency fund to accelerate your financial goals.
-              </p>
-            </div>
-            
-            <button className="whitespace-nowrap inline-flex items-center justify-center px-6 py-3 rounded-xl bg-indigo-500 text-slate-50 font-bold text-sm shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] hover:bg-indigo-400 transition-all active:scale-95 shrink-0">
-              Route Funds
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Early Cycle Pre-funding Warnings */}
       {atRiskBills.length > 0 && (
         <div className="bg-amber-950/20 border border-amber-500/20 p-6 rounded-2xl shadow-lg">

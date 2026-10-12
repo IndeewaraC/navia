@@ -79,8 +79,8 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
     <div className="w-full max-w-2xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden font-sans text-slate-100 selection:bg-indigo-500/30">
       
       {/* Header & Connectivity Status */}
-      <div className="p-6 border-b border-slate-800 bg-slate-900/50 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div className="flex-1 w-full mr-4">
+      <div className="p-4 sm:p-6 border-b border-slate-800 bg-slate-900/50 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="flex-1 min-w-0 w-full">
           <input 
             type="text"
             value={draftStoreName}
@@ -104,24 +104,25 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
       </div>
 
       {/* Interactive Checklist */}
-      <div className="p-6 space-y-4 max-h-[50vh] overflow-y-auto">
+      <div className="p-4 sm:p-6 space-y-4 max-h-[50dvh] overflow-y-auto" aria-label="Grocery items">
         {items.map((item) => (
           <div 
             key={item.id} 
-            className={`flex items-center justify-between gap-4 p-4 rounded-xl border transition-all duration-200 ${item.isChecked ? 'bg-slate-900 border-indigo-500/30' : 'bg-slate-950/50 border-slate-800'}`}
+            className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4 rounded-xl border transition-all duration-200 ${item.isChecked ? 'bg-slate-900 border-indigo-500/30' : 'bg-slate-950/50 border-slate-800'}`}
           >
-            <div className="flex items-center gap-4 flex-1">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
               <input 
                 type="checkbox"
+                aria-label={`Purchased ${item.name}`}
                 checked={item.isChecked}
                 onChange={(e) => updateItem(item.id, { isChecked: e.target.checked })}
-                className="w-6 h-6 rounded border-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 bg-slate-950 cursor-pointer transition-colors"
+                className="w-6 h-6 shrink-0 rounded border-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 bg-slate-950 cursor-pointer transition-colors"
               />
-              <span className={`font-medium transition-colors ${item.isChecked ? 'text-slate-100' : 'text-slate-400'}`}>
+              <span className={`min-w-0 [overflow-wrap:anywhere] font-medium transition-colors ${item.isChecked ? 'text-slate-100' : 'text-slate-400'}`}>
                 {item.name}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0 sm:shrink-0">
               <span className="text-slate-400 font-bold">$</span>
               <input 
                 type="number"
@@ -132,12 +133,14 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
                 onChange={(e) => {
                   updateItem(item.id, { shelfPrice: parseFloat(e.target.value) || 0 });
                 }}
-                className="w-24 pl-3 pr-2 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
+                inputMode="decimal"
+                className="w-full min-w-0 sm:w-28 pl-3 pr-2 py-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-base focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
                 placeholder="0.00"
               />
               <button 
                 onClick={() => removeItem(item.id)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors ml-1"
+                className="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors ml-1"
+                aria-label={`Remove ${item.name}`}
                 title="Remove item"
               >
                 ✕
@@ -145,33 +148,34 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
             </div>
           </div>
         ))}
-        
-        {/* Add New Item Form */}
-        <form onSubmit={handleAddItem} className="flex gap-2 pt-2">
-          <input
-            type="text"
-            value={newItemName}
-            onChange={(e) => setNewItemName(e.target.value)}
-            placeholder="Add new item..."
-            className="flex-1 px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
-          />
-          <button 
-            type="submit"
-            disabled={!newItemName.trim()}
-            className="px-6 py-3 bg-slate-800 text-emerald-400 font-bold rounded-xl border border-slate-700 hover:bg-slate-700 hover:border-slate-600 disabled:opacity-50 transition-colors"
-          >
-            Add
-          </button>
-        </form>
         {items.length === 0 && (
           <div className="text-center py-8 text-slate-500 font-medium">
             No items in your cart yet.
           </div>
         )}
       </div>
+        
+        {/* Add New Item Form */}
+        <form onSubmit={handleAddItem} className="flex gap-2 px-4 pb-4 sm:px-6 sm:pb-6">
+          <input
+            type="text"
+            aria-label="New grocery item"
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+            placeholder="Add new item..."
+            className="flex-1 min-w-0 w-full px-3 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base text-slate-100 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
+          />
+          <button 
+            type="submit"
+            disabled={!newItemName.trim()}
+            className="shrink-0 px-4 py-3 bg-slate-800 text-emerald-400 font-bold rounded-xl border border-slate-700 hover:bg-slate-700 hover:border-slate-600 disabled:opacity-50 transition-colors"
+          >
+            Add
+          </button>
+        </form>
 
       {/* Checkout Terminal */}
-      <div className="p-6 bg-slate-950 border-t border-slate-800 space-y-4">
+      <div className="p-4 sm:p-6 bg-slate-950 border-t border-slate-800 space-y-4">
         <div className="flex items-center justify-between text-sm">
           <span className="text-slate-400 font-medium">Subtotal</span>
           <span className="font-bold text-slate-200">${rawSubtotal.toFixed(2)}</span>
@@ -211,7 +215,7 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
           </div>
         </div>
 
-        <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+        <div className="pt-4 border-t border-slate-800 flex flex-wrap gap-3 items-center justify-between">
           <span className="text-lg font-bold text-slate-100">Final Total</span>
           <div className="flex items-center gap-2">
             <span className="text-emerald-400">$</span>

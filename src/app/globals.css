@@ -33,6 +33,7 @@
 
 :root {
   color-scheme: dark;
+  --bottom-nav-height: calc(4rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* Base resets to guarantee clean rendering */

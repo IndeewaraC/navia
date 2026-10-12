@@ -10,7 +10,7 @@ export default function QuickExpenseFAB({ paymentAccounts = [], activeProjects =
     <>
       <button
         onClick={() => setIsModalOpen(true)}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)] flex items-center justify-center text-3xl transition-transform active:scale-95 z-40"
+        className="fixed bottom-[calc(var(--bottom-nav-height)+1.5rem)] right-6 w-14 h-14 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)] flex items-center justify-center text-3xl transition-transform active:scale-95 z-40"
         aria-label="Add Expense"
       >
         +

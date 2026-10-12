@@ -20,9 +20,9 @@ export default async function DashboardLayout({
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30">
       {/*
         Main content area.
-        pb-24 ensures the content doesn't get hidden behind the fixed bottom nav.
+        Reserve the navigation height, including the device safe area.
       */}
-      <main className="flex-1 pb-24">
+      <main className="flex-1 pb-[calc(var(--bottom-nav-height)+2rem)]">
         {children}
       </main>
 
