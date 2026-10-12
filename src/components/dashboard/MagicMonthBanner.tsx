@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 export default function MagicMonthBanner({ isMagicMonth }: { isMagicMonth: boolean }) {
   // Initialize visibility strictly based on whether it is a magic month
@@ -8,19 +9,19 @@ export default function MagicMonthBanner({ isMagicMonth }: { isMagicMonth: boole
 
   useEffect(() => {
     // If it's not a magic month, do nothing
-    if (!isVisible) return;
+    if (!isVisible || !isMagicMonth) return;
 
-    // Set a timer to dismiss the banner after 3 minutes (180,000 ms)
+    // Dismiss the notice after one minute on screen.
     const timer = setTimeout(() => {
       setIsVisible(false);
-    }, 3 * 60 * 1000);
+    }, 60 * 1000);
 
     // Cleanup timer if the component unmounts early
     return () => clearTimeout(timer);
-  }, [isVisible]);
+  }, [isVisible, isMagicMonth]);
 
   // If the timer has popped or it's not a magic month, render nothing
-  if (!isVisible) return null;
+  if (!isVisible || !isMagicMonth) return null;
 
   return (
     <div className="bg-[#0f0e26] border border-indigo-500/20 rounded-2xl p-6 shadow-xl mb-6 animate-in fade-in slide-in-from-top-4 duration-700">
@@ -31,6 +32,9 @@ export default function MagicMonthBanner({ isMagicMonth }: { isMagicMonth: boole
       <p className="text-slate-300 text-sm leading-relaxed">
         You receive 3 paychecks this month. Route the surplus to your emergency fund to accelerate your financial goals.
       </p>
+      <Link href="/vault" className="mt-4 inline-flex items-center justify-center px-6 py-3 rounded-xl bg-indigo-500 text-slate-50 font-bold text-sm hover:bg-indigo-400 transition-colors">
+        Route Funds
+      </Link>
     </div>
   );
 }

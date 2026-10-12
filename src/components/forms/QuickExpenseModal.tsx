@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/src/lib/supabase/client';
 
-interface QuickExpenseModalProps {
+export interface QuickExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   paymentAccounts: { account_id: string; account_alias: string }[];
-  activeProjects?: any[];
+  activeProjects?: { project_id: string; name: string }[];
 }
 
 type Merchant = {
@@ -18,7 +18,7 @@ type Merchant = {
 
 export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [], activeProjects = [] }: QuickExpenseModalProps) {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   
   const [amount, setAmount] = useState('');
   
@@ -40,26 +40,30 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
   const [warning, setWarning] = useState<{ level: string; message: string } | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      fetchMerchants();
+    if (!isOpen) return;
+    let cancelled = false;
+    async function fetchMerchants() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data: merchantData } = await supabase
+        .from('user_merchants')
+        .select('merchant_id, merchant_name')
+        .eq('user_id', user.id);
+      if (merchantData && !cancelled) {
+        setMerchants(merchantData);
+        setFilteredMerchants(merchantData);
+      }
     }
+    fetchMerchants();
+    return () => { cancelled = true; };
+  }, [isOpen, supabase]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
   }, [isOpen]);
-
-  const fetchMerchants = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Fetch saved Shop List
-    const { data: merchantData } = await supabase
-      .from('user_merchants')
-      .select('merchant_id, merchant_name')
-      .eq('user_id', user.id);
-      
-    if (merchantData) {
-      setMerchants(merchantData);
-      setFilteredMerchants(merchantData);
-    }
-  };
 
   const handleMerchantInput = (text: string) => {
     setMerchantInput(text);
@@ -148,12 +152,12 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm font-sans text-slate-100 selection:bg-emerald-500/30">
-      <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden transform transition-all">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-slate-950/80 backdrop-blur-sm font-sans text-slate-100 selection:bg-emerald-500/30">
+      <div role="dialog" aria-modal="true" aria-labelledby="expense-modal-title" className="w-full max-w-lg max-h-[calc(100dvh-max(0.75rem,env(safe-area-inset-top))-max(0.75rem,env(safe-area-inset-bottom)))] flex flex-col bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-800/50">
-          <h2 className="text-xl font-bold tracking-tight text-slate-100">Log Expense</h2>
+        <div className="shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-slate-800/50">
+          <h2 id="expense-modal-title" className="text-xl font-bold tracking-tight text-slate-100">Log Expense</h2>
           <button 
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors"
@@ -166,7 +170,7 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-6">
           
           {/* Amount Input */}
           <div className="space-y-2 group">
@@ -224,7 +228,7 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
                     onClick={() => selectMerchant(merchantInput)}
                     className="px-4 py-3 hover:bg-slate-800 cursor-pointer text-emerald-400 text-sm font-medium transition-colors"
                   >
-                    + Add "{merchantInput}" to Shop List
+                    + Add &quot;{merchantInput}&quot; to Shop List
                   </div>
                 )}
               </div>
