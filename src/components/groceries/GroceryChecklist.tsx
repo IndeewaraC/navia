@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOfflineGroceryDraft, GroceryItem } from '@/src/hooks/useOfflineGroceryDraft';
+import { calculateGroceryTotal } from '@/src/lib/groceryPricing';
 
 interface GroceryChecklistProps {
   tripId: string;
@@ -13,15 +14,14 @@ interface GroceryChecklistProps {
 
 export default function GroceryChecklist({ tripId, storeName, accountId, initialItems }: GroceryChecklistProps) {
   const router = useRouter();
-  const { items, storeName: draftStoreName, updateStoreName, updateItem, addItem, removeItem, clearDraft, isOffline, pendingSync, rawSubtotal } = useOfflineGroceryDraft(tripId, initialItems, storeName);
+  const { items, storeName: draftStoreName, updateStoreName, updateItem, addItem, removeItem, clearDraft, isOffline, rawSubtotal, pricing, updatePricing } = useOfflineGroceryDraft(tripId, initialItems, storeName);
   
-  const [taxAndFees, setTaxAndFees] = useState(0);
-  const [discounts, setDiscounts] = useState(0);
+  const { taxAndFees, discounts, manualTotal } = pricing;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [newItemName, setNewItemName] = useState('');
 
-  const finalTotal = rawSubtotal + taxAndFees - discounts;
+  const { total: finalTotal, error: pricingError } = calculateGroceryTotal(items, taxAndFees, discounts, manualTotal);
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +31,10 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
   };
 
   const handleCheckout = async () => {
+    if (pricingError) {
+      setError(pricingError);
+      return;
+    }
     if (isOffline) {
       setError('You are currently offline. Data is saved locally. Please connect to a network to finalize checkout.');
       return;
@@ -51,6 +55,7 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
           tax_and_fees: taxAndFees,
           discount_amount: discounts,
           final_settled_total: finalTotal,
+          total_mode: manualTotal !== null ? 'manual' : finalTotal !== null ? 'calculated' : 'unknown',
           items: items // Send items to update their status (e.g., rollover unchecked items)
         }),
       });
@@ -120,10 +125,13 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
               <span className="text-slate-400 font-bold">$</span>
               <input 
                 type="number"
+                aria-label={`Price for ${item.name}`}
                 step="0.01"
                 min="0"
                 value={item.shelfPrice || ''}
-                onChange={(e) => updateItem(item.id, { shelfPrice: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => {
+                  updateItem(item.id, { shelfPrice: parseFloat(e.target.value) || 0 });
+                }}
                 className="w-24 pl-3 pr-2 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
                 placeholder="0.00"
               />
@@ -178,7 +186,8 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
               step="0.01"
               min="0"
               value={taxAndFees || ''}
-              onChange={(e) => setTaxAndFees(parseFloat(e.target.value) || 0)}
+              aria-label="Taxes and fees"
+              onChange={(e) => updatePricing({ taxAndFees: parseFloat(e.target.value) || 0, manualTotal: null })}
               className="w-20 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-right text-slate-100 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-colors"
               placeholder="0.00"
             />
@@ -194,7 +203,8 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
               step="0.01"
               min="0"
               value={discounts || ''}
-              onChange={(e) => setDiscounts(parseFloat(e.target.value) || 0)}
+              aria-label="Discounts"
+              onChange={(e) => updatePricing({ discounts: parseFloat(e.target.value) || 0, manualTotal: null })}
               className="w-20 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-right text-emerald-400 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors placeholder:text-emerald-900"
               placeholder="0.00"
             />
@@ -203,10 +213,23 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
 
         <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
           <span className="text-lg font-bold text-slate-100">Final Total</span>
-          <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-indigo-400">
-            ${finalTotal.toFixed(2)}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-400">$</span>
+            <input
+              aria-label="Final total"
+              type="number"
+              step="0.01"
+              min="0"
+              value={finalTotal ?? ''}
+              onChange={(e) => updatePricing({ manualTotal: e.target.value === '' ? null : Number(e.target.value) })}
+              placeholder="Not entered"
+              className="w-36 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-right text-xl font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
+            />
+          </div>
         </div>
+        <p className="text-xs text-slate-400">
+          Enter a total or price every item to calculate it automatically. Lists with more than two items can be saved with partial prices and no total.
+        </p>
 
         {error && (
           <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium flex items-start gap-3">
@@ -216,10 +239,10 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
         )}
 
         <button
-          onClick={finalTotal > 0 ? handleCheckout : () => router.push('/groceries')}
-          disabled={loading || (finalTotal > 0 && isOffline)}
+          onClick={handleCheckout}
+          disabled={loading || isOffline}
           className={`mt-6 w-full flex items-center justify-center rounded-xl font-bold py-4 px-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-            finalTotal > 0
+            finalTotal !== null
               ? 'bg-indigo-600 text-slate-100 hover:bg-indigo-500 shadow-[0_0_20px_rgba(79,70,229,0.15)] hover:shadow-[0_0_25px_rgba(79,70,229,0.3)]'
               : 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-600/30'
           }`}
@@ -232,10 +255,10 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
                </svg>
                Settling Receipt...
              </>
-          ) : finalTotal > 0 ? (
+          ) : finalTotal !== null ? (
             'Save Receipt'
           ) : (
-            'Save List for Later'
+            'Save Prices Without Total'
           )}
         </button>
       </div>

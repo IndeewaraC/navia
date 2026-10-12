@@ -11,7 +11,7 @@ export default async function DashboardPage() {
   if (!user) return null; // Middleware handles the redirect
 
   // 1. Fetch ALL Payment Accounts
-  let { data: accounts } = await supabase
+  const { data: accounts } = await supabase
     .from('payment_accounts')
     .select('account_id, account_alias, routine_monthly_limit')
     .eq('user_id', user.id);
@@ -39,7 +39,6 @@ export default async function DashboardPage() {
   // 3. Fetch Spend Data for the Current Cycle
   let operationalSpend = 0;
   let exemptSpend = 0;
-  let recentTransactions: any[] = [];
 
   // Use cycle start if available, otherwise fallback to the 1st of the current month
   let effectiveStartDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
@@ -58,8 +57,16 @@ export default async function DashboardPage() {
 
   const spentPerAccount: Record<string, number> = {};
 
+  const { data: recentTransactions } = await supabase
+    .from('transactions')
+    .select('transaction_id, amount, category, txn_type, is_budget_cap_exempt, transaction_date, created_at, source_account_id')
+    .eq('user_id', user.id)
+    .order('transaction_date', { ascending: false })
+    .order('created_at', { ascending: false, nullsFirst: false })
+    .order('transaction_id', { ascending: false })
+    .limit(10);
+
   if (txns) {
-    recentTransactions = txns.slice(0, 5); // Grab latest 5 for the feed
     
     txns.forEach((txn) => {
       if (txn.txn_type === 'EXPENSE') {
@@ -167,7 +174,7 @@ export default async function DashboardPage() {
           <div>
             <h3 className="text-amber-400 font-bold text-sm">Pay Cycle Not Aligned</h3>
             <p className="text-amber-500/80 text-xs mt-1">
-              You haven't set your Anchor Pay Date in Settings. Navia is temporarily using the 1st of the month for calculations.
+              You haven&apos;t set your Anchor Pay Date in Settings. Navia is temporarily using the 1st of the month for calculations.
             </p>
           </div>
         </div>
@@ -182,15 +189,15 @@ export default async function DashboardPage() {
       <section>
         <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 px-2">Recent Transactions</h2>
         <div className="space-y-3">
-          {recentTransactions.length > 0 ? (
-            recentTransactions.map((txn, idx) => {
+          {recentTransactions && recentTransactions.length > 0 ? (
+            recentTransactions.map((txn) => {
               const accountAlias = accounts?.find(a => a.account_id === txn.source_account_id)?.account_alias || 'Unknown Account';
               return (
-                <div key={idx} className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50">
+                <div key={txn.transaction_id} className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50">
                   <div className="flex flex-col">
                     <span className="font-bold text-slate-200">{txn.category}</span>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-slate-500">{new Date(txn.transaction_date).toLocaleDateString()}</span>
+                      <span className="text-xs text-slate-500">{new Date(`${txn.transaction_date.slice(0, 10)}T00:00:00`).toLocaleDateString()}</span>
                       <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-800/50 border border-slate-700 px-1.5 py-0.5 rounded-md">
                         {accountAlias}
                       </span>
@@ -209,7 +216,7 @@ export default async function DashboardPage() {
             })
           ) : (
             <div className="text-center p-6 bg-slate-900/30 rounded-2xl border border-slate-800/30 border-dashed">
-              <p className="text-slate-500 font-medium">No transactions this cycle.</p>
+              <p className="text-slate-500 font-medium">No transactions yet.</p>
             </div>
           )}
         </div>

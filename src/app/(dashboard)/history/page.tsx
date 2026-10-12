@@ -10,6 +10,7 @@ type Transaction = {
   txn_type: 'EXPENSE' | 'INCOME' | 'TRANSFER';
   is_budget_cap_exempt: boolean;
   transaction_date: string;
+  created_at: string;
   source_account_id: string;
 };
 
@@ -18,7 +19,7 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
 
   useEffect(() => {
     async function fetchTransactions() {
@@ -29,7 +30,9 @@ export default function HistoryPage() {
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
-        .order('transaction_date', { ascending: false });
+        .order('transaction_date', { ascending: false })
+        .order('created_at', { ascending: false, nullsFirst: false })
+        .order('transaction_id', { ascending: false });
 
       if (data) {
         setTransactions(data);
@@ -87,7 +90,9 @@ export default function HistoryPage() {
                   <span className="font-semibold text-slate-200">{txn.category}</span>
                   <div className="flex items-center space-x-2 mt-1">
                     <span className="text-xs text-slate-500">
-                      {new Date(txn.transaction_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {new Date(`${txn.transaction_date.slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {' · '}
+                      {new Date(txn.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 uppercase tracking-wider">
                       {txn.source_account_id}

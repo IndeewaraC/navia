@@ -1,6 +1,7 @@
 import { createClient } from '@/src/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { calculateGroceryTotal } from '@/src/lib/groceryPricing';
 
 const GroceryReceiptSchema = z.object({
   source_account_id: z.string().uuid(),
@@ -9,7 +10,8 @@ const GroceryReceiptSchema = z.object({
   raw_subtotal: z.number().nonnegative(),
   tax_and_fees: z.number().nonnegative().default(0),
   discount_amount: z.number().nonnegative().default(0),
-  final_settled_total: z.number().positive(),
+  final_settled_total: z.number().positive().nullable(),
+  total_mode: z.enum(['calculated', 'manual', 'unknown']).default('calculated'),
   items: z.array(z.object({
     id: z.string(),
     name: z.string(),
@@ -30,13 +32,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const parsedData = GroceryReceiptSchema.parse(body);
 
-    // 1. Atomic Receipt Math Validation (BR-04)
-    const expectedTotal = Number((parsedData.raw_subtotal + parsedData.tax_and_fees - parsedData.discount_amount).toFixed(2));
-    const submittedTotal = Number(parsedData.final_settled_total.toFixed(2));
-
-    if (expectedTotal !== submittedTotal) {
+    const manualTotal = parsedData.total_mode === 'manual' ? parsedData.final_settled_total : null;
+    const pricing = calculateGroceryTotal(parsedData.items, parsedData.tax_and_fees, parsedData.discount_amount, manualTotal);
+    const submittedTotal = parsedData.final_settled_total === null ? null : Number(parsedData.final_settled_total.toFixed(2));
+    if (pricing.error || pricing.total !== submittedTotal || (parsedData.total_mode === 'manual' && manualTotal === null)) {
       return NextResponse.json(
-        { error: `Math mismatch: Subtotal + Taxes - Discounts equals $${expectedTotal}, but $${submittedTotal} was submitted.` },
+        { error: pricing.error || 'Final total must match the item prices, taxes and discounts, or be entered manually.' },
         { status: 400 }
       );
     }
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
         user_id: user.id,
         trip_date: parsedData.trip_date,
         store_name: parsedData.store_name,
-        raw_subtotal: parsedData.raw_subtotal,
+        raw_subtotal: pricing.subtotal,
         tax_and_fees: parsedData.tax_and_fees,
         discount_amount: parsedData.discount_amount,
         final_settled_total: submittedTotal,
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
     if (tripError) throw new Error('Failed to record receipt metadata.');
 
     return NextResponse.json(
-      { message: 'Grocery trip settled and routed to ledger successfully.', trip_id: trip.trip_id },
+      { message: 'Grocery prices saved successfully.', trip_id: trip.trip_id },
       { status: 201 }
     );
   } catch (error) {
