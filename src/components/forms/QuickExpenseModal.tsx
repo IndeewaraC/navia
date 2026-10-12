@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/src/lib/supabase/client';
 
-interface QuickExpenseModalProps {
+export interface QuickExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   paymentAccounts: { account_id: string; account_alias: string }[];
-  activeProjects?: any[];
+  activeProjects?: { project_id: string; name: string }[];
 }
 
 type Merchant = {
@@ -18,7 +18,7 @@ type Merchant = {
 
 export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [], activeProjects = [] }: QuickExpenseModalProps) {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   
   const [amount, setAmount] = useState('');
   
@@ -40,10 +40,23 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
   const [warning, setWarning] = useState<{ level: string; message: string } | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      fetchMerchants();
+    if (!isOpen) return;
+    let cancelled = false;
+    async function fetchMerchants() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data: merchantData } = await supabase
+        .from('user_merchants')
+        .select('merchant_id, merchant_name')
+        .eq('user_id', user.id);
+      if (merchantData && !cancelled) {
+        setMerchants(merchantData);
+        setFilteredMerchants(merchantData);
+      }
     }
-  }, [isOpen]);
+    fetchMerchants();
+    return () => { cancelled = true; };
+  }, [isOpen, supabase]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -51,22 +64,6 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = previousOverflow; };
   }, [isOpen]);
-
-  const fetchMerchants = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Fetch saved Shop List
-    const { data: merchantData } = await supabase
-      .from('user_merchants')
-      .select('merchant_id, merchant_name')
-      .eq('user_id', user.id);
-      
-    if (merchantData) {
-      setMerchants(merchantData);
-      setFilteredMerchants(merchantData);
-    }
-  };
 
   const handleMerchantInput = (text: string) => {
     setMerchantInput(text);
@@ -231,7 +228,7 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
                     onClick={() => selectMerchant(merchantInput)}
                     className="px-4 py-3 hover:bg-slate-800 cursor-pointer text-emerald-400 text-sm font-medium transition-colors"
                   >
-                    + Add "{merchantInput}" to Shop List
+                    + Add &quot;{merchantInput}&quot; to Shop List
                   </div>
                 )}
               </div>

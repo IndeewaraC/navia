@@ -1,0 +1,201 @@
+import { test, expect, type Page, type Locator } from '@playwright/test';
+import { createServer, type Server } from 'node:http';
+import { readFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import postcss from 'postcss';
+import tailwind from '@tailwindcss/postcss';
+
+let server: Server;
+let baseURL: string;
+
+test.beforeAll(async () => {
+  test.setTimeout(60_000);
+  const root = process.cwd();
+  const output = path.join(root, '.next/mobile-layout-harness');
+  await mkdir(output, { recursive: true });
+  // Next ships webpack, so this harness uses the project's installed build
+  // tools to exercise real TSX and Tailwind styles without a second app.
+  const loadBuildTool = createRequire(path.join(root, 'package.json'));
+  const { webpack } = loadBuildTool('next/dist/compiled/webpack/webpack');
+  await new Promise<void>((resolve, reject) => {
+    const compiler = webpack({
+      mode: 'development', devtool: false,
+      entry: path.join(root, 'e2e/mobile/fixtures/app.tsx'),
+      output: { path: output, filename: 'app.js' },
+      resolve: {
+        extensions: ['.tsx', '.ts', '.js'],
+        alias: {
+          '@/src/lib/supabase/client': path.join(root, 'e2e/mobile/fixtures/supabase.ts'),
+          '@': root,
+          'next/navigation': path.join(root, 'e2e/mobile/fixtures/navigation.tsx'),
+          'next/link': path.join(root, 'e2e/mobile/fixtures/navigation.tsx'),
+        },
+      },
+      module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(root, 'e2e/mobile/fixtures/typescript-loader.mjs') }] },
+    });
+    compiler.run((error: Error | null, stats?: { hasErrors(): boolean; toString(options: object): string }) => {
+      compiler.close(() => {
+        if (error || stats?.hasErrors()) reject(error || new Error(stats?.toString({ all: false, errors: true })));
+        else resolve();
+      });
+    });
+  });
+  const source = path.join(root, 'src/app/globals.css');
+  const styles = await postcss([tailwind()]).process(await readFile(source, 'utf8'), { from: source });
+  const bundle = await readFile(path.join(output, 'app.js'));
+  server = createServer((req, res) => {
+    if (req.url === '/app.js') {
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8'); res.end(bundle);
+    } else if (req.url === '/styles.css') {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8'); res.end(styles.css);
+    } else {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.end('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script src="/app.js"></script></body></html>');
+    }
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Test server failed to start');
+  baseURL = `http://127.0.0.1:${address.port}`;
+});
+
+test.afterAll(async () => {
+  if (server) await new Promise<void>(resolve => server.close(() => resolve()));
+});
+
+async function expectNoHorizontalOverflow(page: Page) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+}
+
+async function expectPriceAccessible(input: Locator, viewportWidth: number) {
+  await input.scrollIntoViewIfNeeded();
+  const bounds = await input.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewportWidth);
+  const hit = await input.evaluate(el => {
+    const rect = el.getBoundingClientRect();
+    const target = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return { accessible: target === el, target: target?.outerHTML.slice(0, 250), x: rect.x, y: rect.y };
+  });
+  expect(hit.accessible, JSON.stringify(hit)).toBe(true);
+  await input.click();
+}
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
+  { width: 360, height: 420 }, // short viewport, as when a keyboard reduces space
+  { width: 844, height: 390 }, // landscape
+]) {
+  test(`many grocery items can be priced and saved at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(() => {
+      if (window.location.pathname !== '/groceries/active' || localStorage.getItem('navia_grocery_draft_mobile-regression')) return;
+      localStorage.setItem('navia_grocery_draft_mobile-regression', JSON.stringify({
+        storeName: 'Mobile test store',
+        items: Array.from({ length: 30 }, (_, i) => ({
+          id: `item-${i}`, name: `Long grocery item ${i + 1} ${'LongName'.repeat(8)}`,
+          shelfPrice: 0, isChecked: false,
+        })), lastUpdated: Date.now(),
+      }));
+    });
+    await page.goto(`${baseURL}/groceries/active`);
+    const prices = page.getByRole('spinbutton', { name: /^Price for/ });
+    await expect(prices).toHaveCount(30);
+    const itemList = page.locator('[aria-label="Grocery items"]');
+    await itemList.evaluate(el => { el.scrollTop = el.scrollHeight; });
+    // Adding an item remains possible even with the list scrolled to the end.
+    await page.getByRole('textbox', { name: 'New grocery item' }).fill('New item with a long description');
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(prices).toHaveCount(31);
+    await expectPriceAccessible(prices.last(), viewport.width);
+    await prices.last().fill('9.75');
+    await expectPriceAccessible(prices.first(), viewport.width);
+    await prices.first().fill('4.50');
+    await expectNoHorizontalOverflow(page);
+    await page.getByRole('spinbutton', { name: 'Final total', exact: true }).fill('100.25');
+    // Pricing and manual totals survive a refresh.
+    await page.reload();
+    await expect(prices.last()).toHaveValue('9.75');
+    await expect(page.getByRole('spinbutton', { name: 'Final total', exact: true })).toHaveValue('100.25');
+    // Alternate between complete receipts and partial tracking saves.
+    const partial = viewport.width === 320 || viewport.width === 844;
+    if (partial) await page.getByRole('spinbutton', { name: 'Final total', exact: true }).fill('');
+    await page.route('**/api/groceries/receipt', route => route.fulfill({ status: 201, json: { trip_id: 'saved-trip' } }));
+    const save = page.getByRole('button', { name: partial ? 'Save Prices Without Total' : 'Save Receipt', exact: true });
+    await save.scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const bounds = await save.boundingBox();
+    const navBounds = await page.getByRole('navigation').boundingBox();
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(navBounds!.y);
+    await page.screenshot({ path: path.join('.next/mobile-layout-harness', `groceries-${test.info().project.name}-${viewport.width}.png`) });
+    const [request] = await Promise.all([
+      page.waitForRequest('**/api/groceries/receipt'), save.click(),
+    ]);
+    const payload = request.postDataJSON();
+    expect(payload.items).toHaveLength(31);
+    expect(payload.items[0].shelfPrice).toBe(4.5);
+    expect(payload.items[30].shelfPrice).toBe(9.75);
+    expect(payload.final_settled_total).toBe(partial ? null : 100.25);
+    await expect(page).toHaveURL(`${baseURL}/groceries`);
+    expect(await page.evaluate(() => localStorage.getItem('navia_grocery_draft_mobile-regression'))).toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  test(`expense button and modal remain accessible at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto(`${baseURL}/ledger`);
+    const add = page.getByRole('button', { name: 'Add Expense', exact: true });
+    const addBounds = await add.boundingBox();
+    const navBounds = await page.getByRole('navigation').boundingBox();
+    expect(addBounds!.y + addBounds!.height).toBeLessThan(navBounds!.y);
+    await add.click();
+    const dialog = page.getByRole('dialog', { name: 'Log Expense', exact: true });
+    await expect(dialog).toBeVisible();
+    await page.getByRole('checkbox', { name: 'Exempt from Daily Cap' }).check();
+    await page.getByPlaceholder('0.00').fill('25');
+    await page.getByPlaceholder('Merchant or Shop...').fill('Mobile expense');
+    const submit = dialog.getByRole('button', { name: 'Log Expense', exact: true });
+    await submit.scrollIntoViewIfNeeded();
+    const bounds = await submit.boundingBox();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+    // The button must be hit-testable even where it overlaps the bottom nav.
+    expect(await submit.evaluate(el => {
+      const rect = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+    })).toBe(true);
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: path.join('.next/mobile-layout-harness', `expense-${test.info().project.name}-${viewport.width}.png`) });
+    await page.route('**/api/transactions', route => route.fulfill({ status: 201, json: { transaction: { transaction_id: 'saved-expense' } } }));
+    const requestPromise = page.waitForRequest('**/api/transactions');
+    await submit.click();
+    const payload = (await requestPromise).postDataJSON();
+    expect(payload.amount).toBe(25);
+    expect(payload.category).toBe('Mobile expense');
+    expect(payload.is_budget_cap_exempt).toBe(true);
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('');
+    await add.click();
+    await page.getByRole('button', { name: 'Close modal' }).click();
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('');
+  });
+}
+
+test('only one Magic Month banner appears and disappears after exactly one minute', async ({ page }) => {
+  await page.clock.install();
+  await page.goto(`${baseURL}/ledger`);
+  const banner = page.getByRole('heading', { name: 'Magic Month Detected' });
+  await expect(banner).toHaveCount(1);
+  await expect(page.getByRole('link', { name: 'Route Funds' })).toHaveAttribute('href', '/vault');
+  await page.clock.fastForward(59_000);
+  await expect(banner).toBeVisible();
+  await page.clock.fastForward(1_000);
+  await expect(banner).toHaveCount(0);
+  await page.goto(`${baseURL}/ledger?normal`);
+  await expect(banner).toHaveCount(0);
+});

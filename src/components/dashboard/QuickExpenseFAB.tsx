@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import QuickExpenseModal from '@/src/components/forms/QuickExpenseModal';
+import type { QuickExpenseModalProps } from '@/src/components/forms/QuickExpenseModal';
 
-export default function QuickExpenseFAB({ paymentAccounts = [], activeProjects = [] }: { paymentAccounts: any[], activeProjects?: any[] }) {
+export default function QuickExpenseFAB({ paymentAccounts = [], activeProjects = [] }: Pick<QuickExpenseModalProps, 'paymentAccounts' | 'activeProjects'>) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (

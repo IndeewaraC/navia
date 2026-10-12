@@ -227,7 +227,7 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
               value={finalTotal ?? ''}
               onChange={(e) => updatePricing({ manualTotal: e.target.value === '' ? null : Number(e.target.value) })}
               placeholder="Not entered"
-              className="w-36 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-right text-xl font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
+              className="w-36 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-right text-xl placeholder:text-sm font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
             />
           </div>
         </div>

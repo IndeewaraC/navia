@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:mobile": "playwright test --config e2e/mobile-layout.config.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
