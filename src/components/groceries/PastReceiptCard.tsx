@@ -6,8 +6,8 @@ type Trip = {
   trip_id: string;
   store_name: string;
   trip_date: string;
-  final_settled_total: number;
-  receipt_items?: any[];
+  final_settled_total: number | null;
+  receipt_items?: { id: string; name: string; shelfPrice: number }[];
 };
 
 export default function PastReceiptCard({ trip }: { trip: Trip }) {
@@ -29,8 +29,8 @@ export default function PastReceiptCard({ trip }: { trip: Trip }) {
           </div>
         </div>
         <div className="text-right flex flex-col items-end">
-          <div className="font-bold text-emerald-400">${Number(trip.final_settled_total).toFixed(2)}</div>
-          <div className="text-[10px] font-bold tracking-widest uppercase text-slate-600">Settled</div>
+          <div className="font-bold text-emerald-400">{trip.final_settled_total === null ? 'Total not entered' : `$${Number(trip.final_settled_total).toFixed(2)}`}</div>
+          <div className="text-[10px] font-bold tracking-widest uppercase text-slate-600">{trip.final_settled_total === null ? 'Prices saved' : 'Settled'}</div>
         </div>
       </div>
 
@@ -53,10 +53,10 @@ export default function PastReceiptCard({ trip }: { trip: Trip }) {
             
             <div className="p-6 overflow-y-auto flex-1 space-y-4">
               {trip.receipt_items && trip.receipt_items.length > 0 ? (
-                trip.receipt_items.map((item: any) => (
+                trip.receipt_items.map((item) => (
                   <div key={item.id} className="flex justify-between items-center text-sm border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
                     <span className="text-slate-300 font-medium">{item.name}</span>
-                    <span className="text-slate-100 font-bold">${Number(item.shelfPrice || 0).toFixed(2)}</span>
+                    <span className="text-slate-100 font-bold">{item.shelfPrice > 0 ? `$${Number(item.shelfPrice).toFixed(2)}` : 'Not entered'}</span>
                   </div>
                 ))
               ) : (
@@ -69,7 +69,7 @@ export default function PastReceiptCard({ trip }: { trip: Trip }) {
             <div className="p-6 border-t border-slate-800 bg-slate-950">
               <div className="flex justify-between items-center text-lg font-black">
                 <span className="text-slate-100">Total Settled</span>
-                <span className="text-emerald-400">${Number(trip.final_settled_total).toFixed(2)}</span>
+                <span className="text-emerald-400">{trip.final_settled_total === null ? 'Not entered' : `$${Number(trip.final_settled_total).toFixed(2)}`}</span>
               </div>
             </div>
           </div>
