@@ -43,6 +43,16 @@ test('rescheduling the next date preserves the saved current cycle start', () =>
   }
 });
 
+test('an October 2 anchor overrides a later saved or inferred start', () => {
+  const now = new Date('2026-10-21T02:00:00Z');
+  for (const savedStart of ['2026-10-14', '2026-10-17', '2026-10-01', undefined]) {
+    const cycle = getPayCycleStatus('2026-10-02', now, savedStart);
+    assert.equal(cycle.cycle_start, '2026-10-02');
+    assert.equal(cycle.spend_end, '2026-10-20');
+  }
+  assert.equal(getPayCycleStatus('2026-11-14', now, '2026-10-02').cycle_start, '2026-10-02');
+});
+
 test('after the selected reset, no additional resets occur without another date being chosen', () => {
   for (const instant of ['2026-11-28T18:00:00Z', '2026-12-14T18:00:00Z', '2027-02-01T18:00:00Z']) {
     const cycle = getPayCycleStatus('2026-11-14', new Date(instant), '2026-10-14');

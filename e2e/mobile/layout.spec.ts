@@ -264,12 +264,46 @@ for (const failure of ['save-error', 'metadata-error']) {
   });
 }
 
-test('a new reset date in the past is rejected without changing the current cycle', async ({ page }) => {
+test('an October 2 past anchor is accepted and establishes the current cycle start', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
   await page.goto(`${baseURL}/settings`);
   await expect(page.getByLabel('Anchor Pay Date')).toHaveValue('2026-11-14');
-  await page.getByLabel('Anchor Pay Date').fill('2026-10-19');
+  await page.getByLabel('Anchor Pay Date').fill('2026-10-02');
   await page.getByRole('button', { name: 'Save Configuration' }).click();
-  await expect(page.getByRole('alert')).toHaveText('Choose today or a future date for the next reset.');
+  await expect(page.getByRole('status')).toHaveText('Configuration saved.');
+  expect(await page.evaluate(() => window.__naviaResetFixture.metadata.navia_budget_cycle_start)).toBe('2026-10-02');
+  await page.reload();
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-02');
+});
+
+test('October 2 can be restored while retaining the November 14 next reset', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.goto(`${baseURL}/settings`);
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-14');
+  await page.getByLabel('Current Cycle Start Date').fill('2026-10-02');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('status')).toHaveText('Configuration saved.');
+  await page.reload();
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-02');
+  await expect(page.getByLabel('Anchor Pay Date')).toHaveValue('2026-11-14');
+});
+
+test('a failed profile save restores the prior cycle start after an earlier date was entered', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.goto(`${baseURL}/settings?save-error`);
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-14');
+  await page.getByLabel('Current Cycle Start Date').fill('2026-10-02');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('alert')).toContainText('Your current cycle was kept');
+  expect(await page.evaluate(() => window.__naviaResetFixture.metadata.navia_budget_cycle_start)).toBe('2026-10-14');
+});
+
+test('a current cycle start in the future is rejected', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.goto(`${baseURL}/settings`);
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-14');
+  await page.getByLabel('Current Cycle Start Date').fill('2026-11-01');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Choose today or a past date for the current cycle start.');
   expect(await page.evaluate(() => window.__naviaResetFixture.profileWrites)).toBe(0);
 });

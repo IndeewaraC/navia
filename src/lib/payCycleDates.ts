@@ -57,7 +57,9 @@ export function getPayCycleStatus(anchorDate: string | null | undefined, now: Da
 
   if (anchorDay <= currentDay) {
     return {
-      cycle_start: dateFromDay(Math.max(currentStart ?? anchorDay, anchorDay)), cycle_end: today, spend_end: today,
+      // An explicitly saved past anchor is authoritative, including corrections
+      // to an earlier date. A previously inferred start must never override it.
+      cycle_start: dateFromDay(anchorDay), cycle_end: today, spend_end: today,
       next_pay_date: null, days_remaining: null,
       is_magic_month: false, paydays_this_month: 0, is_configured: true,
     };

@@ -225,3 +225,40 @@ test('a far-future reset bootstraps a stable start that survives the first of th
   await DashboardPage();
   assert.equal(db.user.user_metadata.navia_budget_cycle_start, start);
 });
+
+test('October 2 anchors spending, each funding balance, and API alerts despite a later saved start', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-21T02:00:00Z') });
+  const db = fixture({ anchor: '2026-10-02' });
+  const masterCard = '00000000-0000-4000-8000-000000000003';
+  db.user.user_metadata.navia_budget_cycle_start = '2026-10-14';
+  db.tables.payment_accounts = [
+    { account_id: accountId, user_id: userId, account_alias: 'VisaCibc', routine_monthly_limit: 300 },
+    { account_id: masterCard, user_id: userId, account_alias: 'MasterCard-Costco', routine_monthly_limit: 500 },
+  ];
+  db.tables.transactions = [
+    txn('2026-10-01', 999), txn('2026-10-02', 40), txn('2026-10-09', 12.70),
+    txn('2026-10-02', 75, { source_account_id: masterCard }),
+    txn('2026-10-20', 25, { source_account_id: masterCard }),
+    txn('2026-10-20', 15, { is_budget_cap_exempt: true }),
+    txn('2026-10-20', 500, { txn_type: 'INCOME' }),
+    txn('2026-10-20', 1000, { user_id: 'another-user' }), txn('2026-10-21', 60),
+  ];
+  let html = renderToStaticMarkup(await DashboardPage());
+  assert.match(html, /Current cycle started: 2026-10-02/);
+  assert.match(html, /\$152\.70/);
+  assert.match(html, /\$247\.30/);
+  assert.match(html, /\$400\.00/);
+  assert.match(html, /Operational spend: \$52\.70/);
+  assert.match(html, /Operational spend: \$100\.00/);
+  assert.equal(db.user.user_metadata.navia_budget_cycle_start, '2026-10-02');
+  const response = await POST(expense(200));
+  const body = await response.json();
+  assert.equal(response.status, 201);
+  assert.equal(body.threshold_alert.level, 'WARNING');
+  assert.equal(body.threshold_alert.current_spend, 252.70);
+  html = renderToStaticMarkup(await DashboardPage());
+  assert.match(html, /\$352\.70/);
+  assert.match(html, /\$47\.30/);
+  assert.match(html, /\$400\.00/);
+  assert.equal(db.writes.length, 1, 'Recalculation does not rewrite historical transactions');
+});

@@ -152,6 +152,9 @@ export default async function DashboardPage() {
       {accounts && accounts.length > 0 && (
         <section>
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 px-2">Active Funding Sources</h2>
+          <p className="text-xs text-slate-500 mb-3 px-2">
+            Operational spending from {cycleData.cycle_start} through {cycleData.spend_end}.
+          </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {accounts.filter(a => (a.routine_monthly_limit || 0) > 0).map(acc => {
               const spent = spentPerAccount[acc.account_id] || 0;
@@ -166,6 +169,7 @@ export default async function DashboardPage() {
                     {remainingText} <span className="text-slate-500 font-medium text-xs">{isOverLimit ? 'over' : 'left'}</span>
                   </span>
                   <span className="text-slate-500 text-xs mt-0.5">of ${acc.routine_monthly_limit.toFixed(2)} limit</span>
+                  <span className="text-slate-400 text-xs mt-2">Operational spend: ${spent.toFixed(2)}</span>
                 </div>
               );
             })}

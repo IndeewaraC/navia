@@ -18,6 +18,8 @@ Monthly Reset Dates: Choose the exact date for each month's next budget reset. S
 
 The current cycle start is saved as the `navia_budget_cycle_start` user preference using Supabase Auth metadata. Existing monthly configurations initialize from the previous month's matching date once. Dashboard totals and expense alerts share this saved start and the same Winnipeg calendar date; no database schema migration is required.
 
+Settings also exposes **Current Cycle Start Date** for correcting an inferred start or including earlier transactions. A past Anchor Pay Date is authoritative even if a later start was previously saved. For example, an October 2 anchor includes October 2 through today in both operational spending and each funding source's remaining limit. A future Anchor Pay Date schedules the next reset without moving the chosen current start.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
