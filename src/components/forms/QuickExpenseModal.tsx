@@ -1,6 +1,6 @@
-import { localCalendarDate } from '@/src/lib/payCycleDates';
 'use client';
 
+import { localCalendarDate } from '@/src/lib/payCycleDates';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/src/lib/supabase/client';

@@ -2,6 +2,7 @@ import { createClient } from '@/src/lib/supabase/server';
 import EarlyCycleWarnings from '@/src/components/dashboard/EarlyCycleWarnings';
 import QuickExpenseFAB from '@/src/components/dashboard/QuickExpenseFAB';
 import MagicMonthBanner from '@/src/components/dashboard/MagicMonthBanner';
+import { getPayCycleStatus } from '@/src/lib/payCycleDates';
 
 export default async function DashboardPage() {
   // Await createClient() as mandated by Next.js 15+ cookies() async restrictions
@@ -25,37 +26,34 @@ export default async function DashboardPage() {
     .eq('user_id', user.id);
 
   // Fetch the User's Profile for the Display Name
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('display_name')
+    .select('display_name, anchor_pay_date')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
+
+  if (profileError) throw new Error('Unable to load the configured pay cycle.');
     
   const dashboardTitle = profile?.display_name ? `${profile.display_name}'s Vault` : 'Command Center';
 
   // 2. Fetch Active Cycle Status
-  const { data: cycleData, error: cycleError } = await supabase.rpc('get_pay_cycle_status', { p_user_id: user.id });
+  const cycleData = getPayCycleStatus(profile?.anchor_pay_date);
 
   // 3. Fetch Spend Data for the Current Cycle
   let operationalSpend = 0;
   let exemptSpend = 0;
 
-  // Use cycle start if available, otherwise fallback to the 1st of the current month
-  let effectiveStartDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-  const isMissingAnchor = !cycleError && (!cycleData || cycleData.error);
-  
-  if (cycleError) throw new Error('Unable to determine the active pay cycle.');
-  if (!isMissingAnchor && cycleData?.cycle_start) {
-    effectiveStartDate = cycleData.cycle_start;
-  }
+  const isMissingAnchor = !cycleData.is_configured;
 
-  const { data: txns } = await supabase
+  const { data: txns, error: spendError } = await supabase
     .from('transactions')
     .select('amount, category, txn_type, is_budget_cap_exempt, transaction_date, source_account_id')
     .eq('user_id', user.id)
-    .gte('transaction_date', effectiveStartDate.slice(0, 10))
-    .lte('transaction_date', cycleData?.cycle_end || '9999-12-31')
+    .gte('transaction_date', cycleData.cycle_start)
+    .lte('transaction_date', cycleData.cycle_end)
     .order('transaction_date', { ascending: false });
+
+  if (spendError) throw new Error('Unable to load spending for the active pay cycle.');
 
   const spentPerAccount: Record<string, number> = {};
 
@@ -98,6 +96,10 @@ export default async function DashboardPage() {
       <header className="mb-8">
         <h1 className="text-2xl font-black tracking-tight text-slate-100">{dashboardTitle}</h1>
         <p className="text-slate-400 font-medium text-sm">Active Cycle Overview</p>
+        <p className="text-slate-500 text-xs mt-2">
+          {cycleData.cycle_start} – {cycleData.cycle_end}
+          {' · '}Next reset: {cycleData.next_pay_date} at midnight (Winnipeg)
+        </p>
       </header>
 
       <MagicMonthBanner isMagicMonth={cycleData?.is_magic_month || false} />
@@ -184,7 +186,7 @@ export default async function DashboardPage() {
 
       {/* Early Cycle Warning Injection */}
       {cycleData && cycleData.is_magic_month && (accounts || []).length > 0 && (
-        <EarlyCycleWarnings userId={user.id} />
+        <EarlyCycleWarnings cycle={cycleData} />
       )}
 
       {/* Recent Feed */}

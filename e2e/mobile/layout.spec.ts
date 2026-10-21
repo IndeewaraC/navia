@@ -199,3 +199,27 @@ test('only one Magic Month banner appears and disappears after exactly one minut
   await page.goto(`${baseURL}/ledger?normal`);
   await expect(banner).toHaveCount(0);
 });
+
+test('an evening expense keeps its Winnipeg date after UTC midnight', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-23T02:00:00Z') });
+  await page.goto(`${baseURL}/ledger`);
+  await page.getByRole('button', { name: 'Add Expense', exact: true }).click();
+  await page.getByPlaceholder('0.00').fill('15');
+  await page.getByPlaceholder('Merchant or Shop...').fill('Payday boundary test');
+  await page.route('**/api/transactions', route => route.fulfill({ status: 201, json: { transaction: { transaction_id: 'boundary-expense' } } }));
+  const requestPromise = page.waitForRequest('**/api/transactions');
+  await page.getByRole('button', { name: 'Log Expense', exact: true }).click();
+  expect((await requestPromise).postDataJSON().transaction_date).toBe('2026-10-22');
+});
+
+test('an evening grocery receipt keeps its Winnipeg date after UTC midnight', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-23T02:00:00Z') });
+  await page.goto(`${baseURL}/groceries/active`);
+  await page.getByRole('textbox', { name: 'New grocery item' }).fill('Milk');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Final total', exact: true }).fill('10');
+  await page.route('**/api/groceries/receipt', route => route.fulfill({ status: 201, json: { trip_id: 'boundary-receipt' } }));
+  const requestPromise = page.waitForRequest('**/api/groceries/receipt');
+  await page.getByRole('button', { name: 'Save Receipt', exact: true }).click();
+  expect((await requestPromise).postDataJSON().trip_date).toBe('2026-10-22');
+});

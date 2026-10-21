@@ -4,6 +4,7 @@ import MagicMonthBanner from '../../../src/components/dashboard/MagicMonthBanner
 import EarlyCycleWarnings from '../../../src/components/dashboard/EarlyCycleWarnings';
 import QuickExpenseFAB from '../../../src/components/dashboard/QuickExpenseFAB';
 import BottomNav from '../../../src/components/navigation/BottomNav';
+import { getPayCycleStatus } from '../../../src/lib/payCycleDates';
 
 const accounts = Array.from({ length: 8 }, (_, i) => ({
   account_id: `account-${i}`, account_alias: `Funding account ${i + 1}`,
@@ -21,7 +22,7 @@ createRoot(document.getElementById('root')!).render(
       ) : (
         <div className="p-4 max-w-xl mx-auto">
           <MagicMonthBanner isMagicMonth={!window.location.search.includes('normal')} />
-          <EarlyCycleWarnings userId="fixture-user" />
+          <EarlyCycleWarnings cycle={getPayCycleStatus('2026-09-18', new Date('2026-09-28T18:00:00Z'))} />
           <QuickExpenseFAB paymentAccounts={accounts} activeProjects={[{ project_id: 'project-1', name: 'Emergency fund' }]} />
         </div>
       )}

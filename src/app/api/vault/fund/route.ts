@@ -1,6 +1,7 @@
 import { createClient } from '@/src/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { localCalendarDate } from '@/src/lib/payCycleDates';
 
 const FundSchema = z.object({
   project_id: z.string().uuid(),
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Log the funding transaction (exempt from operational budget caps)
-    const { data: transaction, error: txnError } = await supabase
+    const { error: txnError } = await supabase
       .from('transactions')
       .insert({
         user_id: user.id,
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
         exempt_project_id: parsedData.project_id,
         txn_type: 'TRANSFER',
         amount: parsedData.amount,
-        transaction_date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Winnipeg', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+        transaction_date: localCalendarDate(),
         category: 'Exempt Project Funding',
         is_budget_cap_exempt: true, // Core BRD requirement!
       })

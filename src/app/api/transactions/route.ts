@@ -1,6 +1,7 @@
 import { createClient } from '@/src/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getPayCycleStatus } from '@/src/lib/payCycleDates';
 
 // Zero-Trust Payload Validation
 const TransactionSchema = z.object({
@@ -36,14 +37,20 @@ export async function POST(request: Request) {
         .from('payment_accounts')
         .select('routine_monthly_limit')
         .eq('account_id', parsedData.source_account_id)
+        .eq('user_id', user.id)
         .single();
 
       if (account && account.routine_monthly_limit > 0) {
         // Match the dashboard's configured 14-day payday cycle.
-        const { data: cycle, error: cycleError } = await supabase.rpc('get_pay_cycle_status', { p_user_id: user.id });
-        if (cycleError || !cycle || cycle.error || !cycle.cycle_start || !cycle.cycle_end) {
-          return NextResponse.json({ error: 'Pay cycle unavailable. Configure your anchor pay date.' }, { status: 409 });
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('anchor_pay_date')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (profileError) {
+          return NextResponse.json({ error: 'Unable to load the configured pay cycle.' }, { status: 500 });
         }
+        const cycle = getPayCycleStatus(profile?.anchor_pay_date);
         const { data: currentSpend, error: spendError } = await supabase
           .from('transactions')
           .select('amount')
@@ -55,13 +62,14 @@ export async function POST(request: Request) {
           .lte('transaction_date', cycle.cycle_end);
         if (spendError) return NextResponse.json({ error: 'Unable to calculate current spending.' }, { status: 500 });
 
-        const totalOperationalSpend = (currentSpend?.reduce((sum, txn) => sum + Number(txn.amount), 0) || 0) + parsedData.amount;
+        const isInActiveCycle = parsedData.transaction_date >= cycle.cycle_start && parsedData.transaction_date <= cycle.cycle_end;
+        const totalOperationalSpend = (currentSpend?.reduce((sum, txn) => sum + Number(txn.amount), 0) || 0) + (isInActiveCycle ? parsedData.amount : 0);
         const spendPercentage = (totalOperationalSpend / account.routine_monthly_limit) * 100;
 
         // Generate Navia threshold warnings
-        if (spendPercentage >= 100) {
+        if (isInActiveCycle && spendPercentage >= 100) {
           thresholdAlert = { level: 'BREACH', message: '100% Operational Limit Exceeded', current_spend: totalOperationalSpend };
-        } else if (spendPercentage >= 80) {
+        } else if (isInActiveCycle && spendPercentage >= 80) {
           thresholdAlert = { level: 'WARNING', message: '80% Operational Limit Reached', current_spend: totalOperationalSpend };
         }
       }

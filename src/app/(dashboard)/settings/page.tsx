@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/src/lib/supabase/client';
 
@@ -12,7 +12,7 @@ type PaymentAccount = {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -25,6 +25,16 @@ export default function SettingsPage() {
   const [newAlias, setNewAlias] = useState('');
   const [newLimit, setNewLimit] = useState('');
   const [isAddingMode, setIsAddingMode] = useState(false);
+
+  const fetchAccounts = useCallback(async (uid: string) => {
+    const { data } = await supabase
+      .from('payment_accounts')
+      .select('account_id, account_alias, routine_monthly_limit')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: true });
+
+    if (data) setAccounts(data as PaymentAccount[]);
+  }, [supabase]);
 
   useEffect(() => {
     async function loadUserData() {
@@ -50,17 +60,7 @@ export default function SettingsPage() {
       }
     }
     loadUserData();
-  }, [supabase]);
-
-  const fetchAccounts = async (uid: string) => {
-    const { data } = await supabase
-      .from('payment_accounts')
-      .select('account_id, account_alias, routine_monthly_limit')
-      .eq('user_id', uid)
-      .order('created_at', { ascending: true });
-      
-    if (data) setAccounts(data as PaymentAccount[]);
-  };
+  }, [supabase, fetchAccounts]);
 
   const handleSaveConfig = async () => {
     if (!userId) return;
@@ -180,7 +180,7 @@ export default function SettingsPage() {
                 Anchor Pay Date
               </label>
               <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                The date of your first paycheck. Navia uses this to calculate your floating 14-day cycles and intelligently predict Magic Months.
+                Your payday repeats every 14 days from this date. Each cycle resets on payday at midnight in Winnipeg, including daylight saving time.
               </p>
               <input
                 type="date"
