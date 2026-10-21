@@ -39,18 +39,21 @@ export async function POST(request: Request) {
         .single();
 
       if (account && account.routine_monthly_limit > 0) {
-        // Calculate the current operational spend for the active 14-day cycle
-        // Note: In production, cycle start/end dates would be dynamically calculated based on the user's anchor_pay_date. 
-        // For Sprint 1, we aggregate all non-exempt expenses for the current month.
-        const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-        
-        const { data: currentSpend } = await supabase
+        // Match the dashboard's configured 14-day payday cycle.
+        const { data: cycle, error: cycleError } = await supabase.rpc('get_pay_cycle_status', { p_user_id: user.id });
+        if (cycleError || !cycle || cycle.error || !cycle.cycle_start || !cycle.cycle_end) {
+          return NextResponse.json({ error: 'Pay cycle unavailable. Configure your anchor pay date.' }, { status: 409 });
+        }
+        const { data: currentSpend, error: spendError } = await supabase
           .from('transactions')
           .select('amount')
+          .eq('user_id', user.id)
           .eq('source_account_id', parsedData.source_account_id)
           .eq('txn_type', 'EXPENSE')
           .eq('is_budget_cap_exempt', false)
-          .gte('transaction_date', startOfMonth);
+          .gte('transaction_date', cycle.cycle_start)
+          .lte('transaction_date', cycle.cycle_end);
+        if (spendError) return NextResponse.json({ error: 'Unable to calculate current spending.' }, { status: 500 });
 
         const totalOperationalSpend = (currentSpend?.reduce((sum, txn) => sum + Number(txn.amount), 0) || 0) + parsedData.amount;
         const spendPercentage = (totalOperationalSpend / account.routine_monthly_limit) * 100;
