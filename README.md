@@ -14,7 +14,9 @@ Offline-Ready Groceries: Build shopping lists, track per-item prices, and monito
 
 The Stability Vault: Shield funds for long-term goals or unexpected expenses (like car repairs) from your daily operational budget using exempt projects.
 
-Magic Month Routing: Automated detection for 3-paycheck bi-weekly cycles to help you route surplus funds directly to your emergency goals.
+Monthly Reset Dates: Choose the exact date for each month's next budget reset. Spending carries forward until midnight in Winnipeg on that date. Changing the next date preserves the current cycle start; transaction history remains available after a reset. After the chosen date, set your next reset in Settings. No extra 14-day or calendar-month resets are inferred.
+
+The current cycle start is saved as the `navia_budget_cycle_start` user preference using Supabase Auth metadata. Existing monthly configurations initialize from the previous month's matching date once. Dashboard totals and expense alerts share this saved start and the same Winnipeg calendar date; no database schema migration is required.
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 

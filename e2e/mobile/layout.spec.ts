@@ -223,3 +223,53 @@ test('an evening grocery receipt keeps its Winnipeg date after UTC midnight', as
   await page.getByRole('button', { name: 'Save Receipt', exact: true }).click();
   expect((await requestPromise).postDataJSON().trip_date).toBe('2026-10-22');
 });
+
+test('changing the monthly reset date keeps the existing cycle start and persists after refresh', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/settings`);
+  const resetDate = page.getByLabel('Anchor Pay Date');
+  await expect(resetDate).toHaveValue('2026-11-14');
+  await expect(page.getByText(/Choose the exact date for your next monthly reset/)).toBeVisible();
+  await resetDate.fill('2026-11-21');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('status')).toHaveText('Configuration saved.');
+  expect(await page.evaluate(() => window.__naviaResetFixture.metadata.navia_budget_cycle_start)).toBe('2026-10-14');
+  await page.reload();
+  await expect(resetDate).toHaveValue('2026-11-21');
+  await expectNoHorizontalOverflow(page);
+});
+
+test('setting next month after a reset preserves the actual last reset date', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-15T18:00:00Z') });
+  await page.goto(`${baseURL}/settings`);
+  await expect(page.getByLabel('Anchor Pay Date')).toHaveValue('2026-11-14');
+  await page.getByLabel('Anchor Pay Date').fill('2026-12-05');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('status')).toHaveText('Configuration saved.');
+  expect(await page.evaluate(() => window.__naviaResetFixture.metadata.navia_budget_cycle_start)).toBe('2026-11-14');
+});
+
+for (const failure of ['save-error', 'metadata-error']) {
+  test(`a ${failure} cannot report success or change the saved reset date`, async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+    await page.goto(`${baseURL}/settings?${failure}`);
+    await expect(page.getByLabel('Anchor Pay Date')).toHaveValue('2026-11-14');
+    await page.getByLabel('Anchor Pay Date').fill('2026-11-21');
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('status')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__naviaResetFixture.profile.anchor_pay_date)).toBe('2026-11-14');
+    expect(await page.evaluate(() => window.__naviaResetFixture.profileWrites)).toBe(0);
+  });
+}
+
+test('a new reset date in the past is rejected without changing the current cycle', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.goto(`${baseURL}/settings`);
+  await expect(page.getByLabel('Anchor Pay Date')).toHaveValue('2026-11-14');
+  await page.getByLabel('Anchor Pay Date').fill('2026-10-19');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Choose today or a future date for the next reset.');
+  expect(await page.evaluate(() => window.__naviaResetFixture.profileWrites)).toBe(0);
+});

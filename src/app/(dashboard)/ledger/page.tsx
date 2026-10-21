@@ -2,7 +2,7 @@ import { createClient } from '@/src/lib/supabase/server';
 import EarlyCycleWarnings from '@/src/components/dashboard/EarlyCycleWarnings';
 import QuickExpenseFAB from '@/src/components/dashboard/QuickExpenseFAB';
 import MagicMonthBanner from '@/src/components/dashboard/MagicMonthBanner';
-import { getPayCycleStatus } from '@/src/lib/payCycleDates';
+import { getBudgetCycleStatus } from '@/src/lib/budgetCycle';
 
 export default async function DashboardPage() {
   // Await createClient() as mandated by Next.js 15+ cookies() async restrictions
@@ -37,7 +37,7 @@ export default async function DashboardPage() {
   const dashboardTitle = profile?.display_name ? `${profile.display_name}'s Vault` : 'Command Center';
 
   // 2. Fetch Active Cycle Status
-  const cycleData = getPayCycleStatus(profile?.anchor_pay_date);
+  const cycleData = await getBudgetCycleStatus(supabase, user, profile?.anchor_pay_date);
 
   // 3. Fetch Spend Data for the Current Cycle
   let operationalSpend = 0;
@@ -50,7 +50,7 @@ export default async function DashboardPage() {
     .select('amount, category, txn_type, is_budget_cap_exempt, transaction_date, source_account_id')
     .eq('user_id', user.id)
     .gte('transaction_date', cycleData.cycle_start)
-    .lte('transaction_date', cycleData.cycle_end)
+    .lte('transaction_date', cycleData.spend_end)
     .order('transaction_date', { ascending: false });
 
   if (spendError) throw new Error('Unable to load spending for the active pay cycle.');
@@ -97,8 +97,10 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-black tracking-tight text-slate-100">{dashboardTitle}</h1>
         <p className="text-slate-400 font-medium text-sm">Active Cycle Overview</p>
         <p className="text-slate-500 text-xs mt-2">
-          {cycleData.cycle_start} – {cycleData.cycle_end}
-          {' · '}Next reset: {cycleData.next_pay_date} at midnight (Winnipeg)
+          Current cycle started: {cycleData.cycle_start}
+          {cycleData.next_pay_date
+            ? ` · Next reset: ${cycleData.next_pay_date} at midnight (Winnipeg)`
+            : ' · Choose your next reset date in Settings. Spending carries forward until then.'}
         </p>
       </header>
 
@@ -178,7 +180,7 @@ export default async function DashboardPage() {
           <div>
             <h3 className="text-amber-400 font-bold text-sm">Pay Cycle Not Aligned</h3>
             <p className="text-amber-500/80 text-xs mt-1">
-              You haven&apos;t set your Anchor Pay Date in Settings. Navia is temporarily using the 1st of the month for calculations.
+              Choose your next reset date in Settings. Your spending carries forward until the date you select.
             </p>
           </div>
         </div>

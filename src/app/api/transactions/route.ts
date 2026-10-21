@@ -1,7 +1,7 @@
 import { createClient } from '@/src/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getPayCycleStatus } from '@/src/lib/payCycleDates';
+import { getBudgetCycleStatus } from '@/src/lib/budgetCycle';
 
 // Zero-Trust Payload Validation
 const TransactionSchema = z.object({
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
         .single();
 
       if (account && account.routine_monthly_limit > 0) {
-        // Match the dashboard's configured 14-day payday cycle.
+        // Match the dashboard's current cycle and explicitly selected reset.
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('anchor_pay_date')
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         if (profileError) {
           return NextResponse.json({ error: 'Unable to load the configured pay cycle.' }, { status: 500 });
         }
-        const cycle = getPayCycleStatus(profile?.anchor_pay_date);
+        const cycle = await getBudgetCycleStatus(supabase, user, profile?.anchor_pay_date);
         const { data: currentSpend, error: spendError } = await supabase
           .from('transactions')
           .select('amount')
@@ -59,10 +59,10 @@ export async function POST(request: Request) {
           .eq('txn_type', 'EXPENSE')
           .eq('is_budget_cap_exempt', false)
           .gte('transaction_date', cycle.cycle_start)
-          .lte('transaction_date', cycle.cycle_end);
+          .lte('transaction_date', cycle.spend_end);
         if (spendError) return NextResponse.json({ error: 'Unable to calculate current spending.' }, { status: 500 });
 
-        const isInActiveCycle = parsedData.transaction_date >= cycle.cycle_start && parsedData.transaction_date <= cycle.cycle_end;
+        const isInActiveCycle = parsedData.transaction_date >= cycle.cycle_start && parsedData.transaction_date <= cycle.spend_end;
         const totalOperationalSpend = (currentSpend?.reduce((sum, txn) => sum + Number(txn.amount), 0) || 0) + (isInActiveCycle ? parsedData.amount : 0);
         const spendPercentage = (totalOperationalSpend / account.routine_monthly_limit) * 100;
 

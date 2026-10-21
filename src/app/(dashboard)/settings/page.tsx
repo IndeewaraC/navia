@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/src/lib/supabase/client';
+import { getPayCycleStatus, isCalendarDate, localCalendarDate } from '@/src/lib/payCycleDates';
 
 type PaymentAccount = {
   account_id: string;
@@ -19,6 +20,8 @@ export default function SettingsPage() {
   const [userEmail, setUserEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [anchorDate, setAnchorDate] = useState('');
+  const [configError, setConfigError] = useState('');
+  const [configSaved, setConfigSaved] = useState(false);
   
   // Payment Accounts State
   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
@@ -64,17 +67,44 @@ export default function SettingsPage() {
 
   const handleSaveConfig = async () => {
     if (!userId) return;
+    setConfigError('');
+    setConfigSaved(false);
+    if (!isCalendarDate(anchorDate)) {
+      setConfigError('Choose a valid reset date.');
+      return;
+    }
     setLoading(true);
-    await supabase
-      .from('profiles')
-      .upsert({ 
-        id: userId, 
-        anchor_pay_date: anchorDate,
-        display_name: displayName,
-        username: userEmail.split('@')[0]
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user || user.id !== userId) throw new Error('Please sign in again to save your reset date.');
+
+      const { data: currentProfile, error: profileError } = await supabase
+        .from('profiles').select('anchor_pay_date').eq('id', userId).maybeSingle();
+      if (profileError) throw new Error('Unable to load your current reset date.');
+      if (anchorDate !== currentProfile?.anchor_pay_date && anchorDate < localCalendarDate()) {
+        throw new Error('Choose today or a future date for the next reset.');
+      }
+
+      // Pin the existing start BEFORE changing the next reset. If the profile
+      // save fails, the existing cycle still has exactly the same boundaries.
+      const currentCycle = getPayCycleStatus(currentProfile?.anchor_pay_date, new Date(), user.user_metadata?.navia_budget_cycle_start);
+      const { error: cycleError } = await supabase.auth.updateUser({
+        data: { navia_budget_cycle_start: currentCycle.cycle_start },
       });
-    setLoading(false);
-    alert('Profile configuration updated.');
+      if (cycleError) throw new Error('Unable to preserve your current spending. Reset date was not changed.');
+
+      const { error: saveError } = await supabase.from('profiles').upsert({
+        id: userId, anchor_pay_date: anchorDate, display_name: displayName,
+        username: userEmail.split('@')[0],
+      });
+      if (saveError) throw new Error('Unable to save configuration. Please try again.');
+      setConfigSaved(true);
+      router.refresh();
+    } catch (error) {
+      setConfigError(error instanceof Error ? error.message : 'Unable to save configuration.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAddAccount = async () => {
@@ -176,16 +206,17 @@ export default function SettingsPage() {
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors mb-6"
               />
 
-              <label className="block text-sm font-bold text-slate-300 mb-2">
+              <label htmlFor="anchor-pay-date" className="block text-sm font-bold text-slate-300 mb-2">
                 Anchor Pay Date
               </label>
               <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                Your payday repeats every 14 days from this date. Each cycle resets on payday at midnight in Winnipeg, including daylight saving time.
+                Choose the exact date for your next monthly reset. Spending carries forward until midnight in Winnipeg on that date. Set a new date each month; changing it keeps your current spending.
               </p>
               <input
                 type="date"
+                id="anchor-pay-date"
                 value={anchorDate}
-                onChange={(e) => setAnchorDate(e.target.value)}
+                onChange={(e) => { setAnchorDate(e.target.value); setConfigSaved(false); setConfigError(''); }}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
               />
             </div>
@@ -197,6 +228,8 @@ export default function SettingsPage() {
             >
               {loading ? 'Saving...' : 'Save Configuration'}
             </button>
+            {configError && <p role="alert" className="text-sm text-rose-400">{configError}</p>}
+            {configSaved && <p role="status" className="text-sm text-emerald-400">Configuration saved.</p>}
           </div>
         </div>
 

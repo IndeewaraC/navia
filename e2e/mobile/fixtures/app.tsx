@@ -5,17 +5,19 @@ import EarlyCycleWarnings from '../../../src/components/dashboard/EarlyCycleWarn
 import QuickExpenseFAB from '../../../src/components/dashboard/QuickExpenseFAB';
 import BottomNav from '../../../src/components/navigation/BottomNav';
 import { getPayCycleStatus } from '../../../src/lib/payCycleDates';
+import SettingsPage from '../../../src/app/(dashboard)/settings/page';
 
 const accounts = Array.from({ length: 8 }, (_, i) => ({
   account_id: `account-${i}`, account_alias: `Funding account ${i + 1}`,
 }));
 const initialItems: [] = [];
 const groceries = window.location.pathname.includes('/groceries');
+const settings = window.location.pathname === '/settings';
 
 createRoot(document.getElementById('root')!).render(
   <>
     <main className="pb-[calc(var(--bottom-nav-height)+2rem)]">
-      {groceries ? (
+      {settings ? <SettingsPage /> : groceries ? (
         <div className="pt-8 pb-32 px-4 sm:px-6">
           <GroceryChecklist tripId="mobile-regression" storeName="Mobile test store" accountId="account-0" initialItems={initialItems} />
         </div>

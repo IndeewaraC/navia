@@ -6,8 +6,9 @@ const DAY_MS = 86_400_000;
 export interface PayCycleStatus {
   cycle_start: string;
   cycle_end: string;
-  next_pay_date: string;
-  days_remaining: number;
+  spend_end: string;
+  next_pay_date: string | null;
+  days_remaining: number | null;
   is_magic_month: boolean;
   paydays_this_month: number;
   is_configured: boolean;
@@ -28,36 +29,54 @@ function calendarDay(value: string): number | null {
   return milliseconds / DAY_MS;
 }
 
+export function isCalendarDate(value: unknown): value is string {
+  return typeof value === 'string' && calendarDay(value) !== null;
+}
+
 function dateFromDay(day: number): string {
   return new Date(day * DAY_MS).toISOString().slice(0, 10);
 }
 
-// Calculate on the application server so a code deployment fixes the live
-// dashboard and alerts together, without depending on a separate SQL release.
-export function getPayCycleStatus(anchorDate: string | null | undefined, now: Date = new Date()): PayCycleStatus {
+// The selected date is the next reset itself, not a recurring payday seed.
+// Keep the persisted cycle start when the user reschedules next month's reset.
+export function getPayCycleStatus(anchorDate: string | null | undefined, now: Date = new Date(), savedCycleStart?: string | null): PayCycleStatus {
   const today = localCalendarDate(now);
   const currentDay = calendarDay(today)!;
   const monthStart = calendarDay(`${today.slice(0, 7)}-01`)!;
-  const nextMonth = new Date(monthStart * DAY_MS);
-  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
-  const nextMonthDay = nextMonth.getTime() / DAY_MS;
   const anchorDay = anchorDate ? calendarDay(anchorDate) : null;
+  const savedDay = isCalendarDate(savedCycleStart) ? calendarDay(savedCycleStart)! : null;
+  const currentStart = savedDay !== null && savedDay <= currentDay ? savedDay : null;
 
   if (anchorDay === null) {
     return {
-      cycle_start: dateFromDay(monthStart), cycle_end: dateFromDay(nextMonthDay - 1),
-      next_pay_date: dateFromDay(nextMonthDay), days_remaining: nextMonthDay - 1 - currentDay,
+      cycle_start: dateFromDay(currentStart ?? monthStart), cycle_end: today, spend_end: today,
+      next_pay_date: null, days_remaining: null,
       is_magic_month: false, paydays_this_month: 0, is_configured: false,
     };
   }
 
-  // floor (rather than truncation) also keeps a future anchor aligned.
-  const cycleStart = anchorDay + Math.floor((currentDay - anchorDay) / 14) * 14;
-  const firstPayday = anchorDay + Math.ceil((monthStart - anchorDay) / 14) * 14;
-  const paydays = Math.floor((nextMonthDay - 1 - firstPayday) / 14) + 1;
+  if (anchorDay <= currentDay) {
+    return {
+      cycle_start: dateFromDay(Math.max(currentStart ?? anchorDay, anchorDay)), cycle_end: today, spend_end: today,
+      next_pay_date: null, days_remaining: null,
+      is_magic_month: false, paydays_this_month: 0, is_configured: true,
+    };
+  }
+
+  // Bootstrap existing monthly configurations once. The caller persists this
+  // start, so a later date edit or calendar month cannot discard current spend.
+  const previousMonth = new Date(anchorDay * DAY_MS);
+  const resetDayOfMonth = previousMonth.getUTCDate();
+  previousMonth.setUTCDate(1);
+  const previousMonthEnd = previousMonth.getTime() / DAY_MS - 1;
+  previousMonth.setUTCMonth(previousMonth.getUTCMonth() - 1);
+  const previousStart = Math.min(previousMonth.getTime() / DAY_MS + resetDayOfMonth - 1, previousMonthEnd);
+  const initialStart = previousStart <= currentDay ? previousStart : monthStart;
+
   return {
-    cycle_start: dateFromDay(cycleStart), cycle_end: dateFromDay(cycleStart + 13),
-    next_pay_date: dateFromDay(cycleStart + 14), days_remaining: cycleStart + 13 - currentDay,
-    is_magic_month: paydays === 3, paydays_this_month: paydays, is_configured: true,
+    cycle_start: dateFromDay(currentStart ?? initialStart), cycle_end: dateFromDay(anchorDay - 1), spend_end: today,
+    next_pay_date: anchorDate!, days_remaining: anchorDay - currentDay,
+    // A manually chosen budget reset does not establish an income schedule.
+    is_magic_month: false, paydays_this_month: 0, is_configured: true,
   };
 }
