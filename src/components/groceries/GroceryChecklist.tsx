@@ -1,3 +1,4 @@
+import { localCalendarDate } from '@/src/lib/payCycleDates';
 'use client';
 
 import { useState } from 'react';
@@ -50,7 +51,7 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
         body: JSON.stringify({
           source_account_id: accountId,
           store_name: draftStoreName || 'Unnamed Store',
-          trip_date: new Date().toISOString().split('T')[0],
+          trip_date: localCalendarDate(),
           raw_subtotal: rawSubtotal,
           tax_and_fees: taxAndFees,
           discount_amount: discounts,
