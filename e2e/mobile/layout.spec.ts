@@ -68,6 +68,66 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
 
+for (const timezoneId of ['America/Winnipeg', 'UTC', 'Pacific/Kiritimati']) {
+  test(`receipt list and details preserve October 20 in ${timezoneId}`, async ({ browser }) => {
+    const context = await browser.newContext({ timezoneId, viewport: { width: 390, height: 844 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseURL}/groceries/receipt-test`);
+      const card = page.getByRole('button', { name: 'View receipt for costco-20/10' });
+      await expect(card).toContainText('Oct 20, 2026');
+      await card.click();
+      const dialog = page.getByRole('dialog', { name: 'Receipt for costco-20/10' });
+      await expect(dialog).toContainText('Oct 20, 2026');
+      await expect(dialog).not.toContainText('Oct 19');
+      await expect(dialog).toContainText('$20.00');
+      await page.getByRole('button', { name: 'Close receipt' }).click();
+      await expect(dialog).toBeHidden();
+      await expectNoHorizontalOverflow(page);
+    } finally { await context.close(); }
+  });
+}
+
+test('recording project funds needs no checking account and refreshes project progress', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${baseURL}/vault`);
+  await page.getByRole('button', { name: '+ Add Funds' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add Project Funds' });
+  await expect(dialog).toContainText('tracking only');
+  await page.getByRole('spinbutton', { name: 'Amount to Record ($)' }).fill('40');
+  await page.route('**/api/vault/fund', async route => {
+    const body = route.request().postDataJSON();
+    expect(body).toEqual({ project_id: '00000000-0000-4000-8000-000000000002', amount: 40 });
+    await page.evaluate(() => localStorage.setItem('navia-project-service-fixture', '40'));
+    await route.fulfill({ status: 200, json: { message: 'Project funds recorded successfully', project: { saved_amount: 40 } } });
+  });
+  await dialog.getByRole('button', { name: 'Record Funds' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('$40.00', { exact: true })).toBeVisible();
+  await expect(page.getByText('16% Funded', { exact: true })).toBeVisible();
+  await expect(page.getByText('$0.00', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('16% Funded', { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test('failed project contribution shows an error without claiming the funds were recorded', async ({ page }) => {
+  await page.goto(`${baseURL}/vault`);
+  await page.getByRole('button', { name: '+ Add Funds' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add Project Funds' });
+  await page.getByRole('spinbutton', { name: 'Amount to Record ($)' }).fill('40');
+  await page.route('**/api/vault/fund', route => route.fulfill({ status: 500, json: { error: 'Failed to record project funds.' } }));
+  await dialog.getByRole('button', { name: 'Record Funds' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText('Failed to record project funds.');
+  await expect(dialog).toBeVisible();
+  await expect(page.getByText('0% Funded', { exact: true })).toBeVisible();
+  await expect(page.getByRole('spinbutton', { name: 'Amount to Record ($)' })).toHaveValue('40');
+  await expect(dialog.getByRole('button', { name: 'Record Funds' })).toBeEnabled();
+});
+
 async function expectPriceAccessible(input: Locator, viewportWidth: number) {
   await input.scrollIntoViewIfNeeded();
   const bounds = await input.boundingBox();

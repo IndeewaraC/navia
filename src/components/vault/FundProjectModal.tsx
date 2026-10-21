@@ -12,17 +12,15 @@ interface Project {
 
 interface FundProjectModalProps {
   project: Project;
-  checkingAccount: any;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function FundProjectModal({ project, checkingAccount, onClose, onSuccess }: FundProjectModalProps) {
+export default function FundProjectModal({ project, onClose, onSuccess }: FundProjectModalProps) {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const checkingBalance = checkingAccount?.current_statement_balance || 0;
   const remainingNeeded = Math.max(0, project.target_amount - project.saved_amount);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,20 +30,8 @@ export default function FundProjectModal({ project, checkingAccount, onClose, on
 
     const fundAmount = parseFloat(amount);
     
-    if (isNaN(fundAmount) || fundAmount <= 0) {
+    if (!Number.isFinite(fundAmount) || fundAmount <= 0) {
       setError('Amount must be greater than zero.');
-      setLoading(false);
-      return;
-    }
-
-    if (fundAmount > checkingBalance) {
-      setError(`Insufficient funds in Checking. You only have $${checkingBalance.toFixed(2)} available.`);
-      setLoading(false);
-      return;
-    }
-
-    if (!checkingAccount?.account_id) {
-      setError('No checking account found to fund from.');
       setLoading(false);
       return;
     }
@@ -56,36 +42,35 @@ export default function FundProjectModal({ project, checkingAccount, onClose, on
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: project.project_id,
-          source_account_id: checkingAccount.account_id,
           amount: fundAmount
         })
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fund project');
+      if (!res.ok) throw new Error(data.error || 'Failed to record project funds');
 
       onSuccess();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record project funds');
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 relative overflow-hidden">
+    <div role="dialog" aria-modal="true" aria-labelledby="fund-project-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+      <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 relative">
         {/* Glow effect */}
         <div className="absolute top-0 left-0 -mt-8 -ml-8 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl" />
         
-        <h2 className="text-xl font-bold text-slate-100 mb-2 relative z-10">
-          Fund Project
+        <h2 id="fund-project-title" className="text-xl font-bold text-slate-100 mb-2 relative z-10">
+          Add Project Funds
         </h2>
         <p className="text-sm text-slate-400 mb-6 relative z-10">
-          Transfer money from Primary Checking into the Vault for <span className="font-bold text-slate-200">{project.icon} {project.name}</span>.
+          Record savings for <span className="font-bold text-slate-200">{project.icon} {project.name}</span>. This updates your progress for tracking only.
         </p>
 
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-medium relative z-10">
+          <div role="alert" className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-medium relative z-10">
             {error}
           </div>
         )}
@@ -99,11 +84,13 @@ export default function FundProjectModal({ project, checkingAccount, onClose, on
             </div>
             
             <div className="pt-2">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Transfer Amount ($)</label>
+              <label htmlFor="project-fund-amount" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Amount to Record ($)</label>
               <div className="relative">
                 <span className="absolute left-4 top-3.5 text-slate-500 font-bold">$</span>
                 <input 
+                  id="project-fund-amount"
                   type="number" 
+                  min="0.01"
                   step="0.01"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
@@ -129,7 +116,7 @@ export default function FundProjectModal({ project, checkingAccount, onClose, on
               disabled={loading}
               className="flex-1 py-3 px-4 rounded-xl font-bold text-slate-950 bg-emerald-500 hover:bg-emerald-400 transition-colors disabled:opacity-50"
             >
-              {loading ? 'Transferring...' : 'Transfer Funds'}
+              {loading ? 'Recording...' : 'Record Funds'}
             </button>
           </div>
         </form>

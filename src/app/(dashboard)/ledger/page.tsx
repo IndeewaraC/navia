@@ -3,6 +3,7 @@ import EarlyCycleWarnings from '@/src/components/dashboard/EarlyCycleWarnings';
 import QuickExpenseFAB from '@/src/components/dashboard/QuickExpenseFAB';
 import MagicMonthBanner from '@/src/components/dashboard/MagicMonthBanner';
 import { getBudgetCycleStatus } from '@/src/lib/budgetCycle';
+import { formatCalendarDate } from '@/src/lib/calendarDateDisplay';
 
 export default async function DashboardPage() {
   // Await createClient() as mandated by Next.js 15+ cookies() async restrictions
@@ -207,7 +208,7 @@ export default async function DashboardPage() {
                   <div className="flex flex-col">
                     <span className="font-bold text-slate-200">{txn.category}</span>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-slate-500">{new Date(`${txn.transaction_date.slice(0, 10)}T00:00:00`).toLocaleDateString()}</span>
+                      <span className="text-xs text-slate-500">{formatCalendarDate(txn.transaction_date)}</span>
                       <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-800/50 border border-slate-700 px-1.5 py-0.5 rounded-md">
                         {accountAlias}
                       </span>

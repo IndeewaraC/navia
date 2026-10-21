@@ -24,15 +24,6 @@ export default async function VaultPage() {
     .limit(1)
     .single();
 
-  // Fetch primary checking account (for funding projects)
-  const { data: checkingAccount } = await supabase
-    .from('payment_accounts')
-    .select('account_id, current_statement_balance')
-    .eq('user_id', user.id)
-    .ilike('account_alias', '%checking%')
-    .limit(1)
-    .single();
-
   // Fetch real exempt projects from the database
   const { data: activeProjects } = await supabase
     .from('exempt_projects')
@@ -43,7 +34,6 @@ export default async function VaultPage() {
   return (
     <VaultClient 
       vaultAccount={vaultAccount} 
-      checkingAccount={checkingAccount}
       initialProjects={activeProjects || []} 
     />
   );
