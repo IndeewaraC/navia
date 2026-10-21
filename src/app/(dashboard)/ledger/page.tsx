@@ -34,7 +34,7 @@ export default async function DashboardPage() {
   const dashboardTitle = profile?.display_name ? `${profile.display_name}'s Vault` : 'Command Center';
 
   // 2. Fetch Active Cycle Status
-  const { data: cycleData } = await supabase.rpc('get_pay_cycle_status', { p_user_id: user.id });
+  const { data: cycleData, error: cycleError } = await supabase.rpc('get_pay_cycle_status', { p_user_id: user.id });
 
   // 3. Fetch Spend Data for the Current Cycle
   let operationalSpend = 0;
@@ -42,8 +42,9 @@ export default async function DashboardPage() {
 
   // Use cycle start if available, otherwise fallback to the 1st of the current month
   let effectiveStartDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-  const isMissingAnchor = !cycleData || cycleData.error;
+  const isMissingAnchor = !cycleError && (!cycleData || cycleData.error);
   
+  if (cycleError) throw new Error('Unable to determine the active pay cycle.');
   if (!isMissingAnchor && cycleData?.cycle_start) {
     effectiveStartDate = cycleData.cycle_start;
   }
@@ -52,7 +53,8 @@ export default async function DashboardPage() {
     .from('transactions')
     .select('amount, category, txn_type, is_budget_cap_exempt, transaction_date, source_account_id')
     .eq('user_id', user.id)
-    .gte('transaction_date', effectiveStartDate)
+    .gte('transaction_date', effectiveStartDate.slice(0, 10))
+    .lte('transaction_date', cycleData?.cycle_end || '9999-12-31')
     .order('transaction_date', { ascending: false });
 
   const spentPerAccount: Record<string, number> = {};
