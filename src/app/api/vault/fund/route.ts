@@ -42,7 +42,7 @@ export async function POST(request: Request) {
         exempt_project_id: parsedData.project_id,
         txn_type: 'TRANSFER',
         amount: parsedData.amount,
-        transaction_date: new Date().toISOString().split('T')[0],
+        transaction_date: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Winnipeg', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
         category: 'Exempt Project Funding',
         is_budget_cap_exempt: true, // Core BRD requirement!
       })
