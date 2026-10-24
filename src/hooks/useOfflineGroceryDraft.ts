@@ -88,6 +88,10 @@ export function useOfflineGroceryDraft(tripId: string, initialDraft: GroceryItem
     setPendingSync(true);
   }, [tripId]);
 
+  const saveDraft = useCallback(() => {
+    saveToStorage(storeName, itemsRef.current);
+  }, [storeName, saveToStorage]);
+
   const updatePricing = useCallback((updates: Partial<GroceryPricing>) => {
     pricingRef.current = { ...pricingRef.current, ...updates };
     setPricing(pricingRef.current);
@@ -150,6 +154,7 @@ export function useOfflineGroceryDraft(tripId: string, initialDraft: GroceryItem
     updateItem, 
     addItem,
     removeItem,
+    saveDraft,
     clearDraft, 
     isOffline, 
     pendingSync,

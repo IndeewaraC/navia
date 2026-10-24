@@ -82,6 +82,53 @@ async function expectPriceAccessible(input: Locator, viewportWidth: number) {
   await input.click();
 }
 
+test('Later preserves the full grocery draft and resumes without checkout, including offline', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const receipts: string[] = [];
+  page.on('request', request => {
+    if (request.url().includes('/api/groceries/receipt')) receipts.push(request.url());
+  });
+  await page.goto(`${baseURL}/groceries/active`);
+  await page.getByPlaceholder('Name this grocery run...').fill('Weekend groceries');
+  await page.getByRole('textbox', { name: 'New grocery item' }).fill('Milk');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Purchased Milk' }).check();
+  await page.getByRole('spinbutton', { name: 'Price for Milk' }).fill('4.50');
+  await page.getByRole('spinbutton', { name: 'Taxes and fees' }).fill('1.25');
+  await page.getByRole('spinbutton', { name: 'Discounts' }).fill('0.50');
+  await page.getByRole('spinbutton', { name: 'Final total', exact: true }).fill('10');
+  await page.getByRole('textbox', { name: 'New grocery item' }).fill('Bread');
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await expect(page.getByText('Offline (Saved)')).toBeVisible();
+  await page.getByRole('button', { name: 'Later', exact: true }).click();
+  await expect(page).toHaveURL(`${baseURL}/groceries`);
+
+  const draft = await page.evaluate(() => JSON.parse(localStorage.getItem('navia_grocery_draft_mobile-regression')!));
+  expect(draft.storeName).toBe('Weekend groceries');
+  expect(draft.items).toEqual([
+    expect.objectContaining({ name: 'Milk', shelfPrice: 4.5, isChecked: true }),
+    expect.objectContaining({ name: 'Bread', shelfPrice: 0, isChecked: false }),
+  ]);
+  expect(draft.pricing).toEqual({ taxAndFees: 1.25, discounts: 0.5, manualTotal: 10 });
+  await page.goto(`${baseURL}/groceries/active`);
+  await expect(page.getByPlaceholder('Name this grocery run...')).toHaveValue('Weekend groceries');
+  await expect(page.getByRole('checkbox', { name: 'Purchased Milk' })).toBeChecked();
+  await expect(page.getByRole('spinbutton', { name: 'Price for Milk' })).toHaveValue('4.5');
+  await expect(page.getByRole('spinbutton', { name: 'Price for Bread' })).toBeVisible();
+  await expect(page.getByRole('spinbutton', { name: 'Final total', exact: true })).toHaveValue('10');
+  expect(receipts).toEqual([]);
+});
+
+test('Later stays on the cart if saving the draft fails', async ({ page }) => {
+  await page.goto(`${baseURL}/groceries/active`);
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => { throw new DOMException('Storage full', 'QuotaExceededError'); };
+  });
+  await page.getByRole('button', { name: 'Later', exact: true }).click();
+  await expect(page.getByText('Unable to save your grocery list on this device. Please try again before leaving.')).toBeVisible();
+  await expect(page).toHaveURL(`${baseURL}/groceries/active`);
+});
+
 for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 844 },

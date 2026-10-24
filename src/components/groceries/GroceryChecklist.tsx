@@ -14,7 +14,7 @@ interface GroceryChecklistProps {
 
 export default function GroceryChecklist({ tripId, storeName, accountId, initialItems }: GroceryChecklistProps) {
   const router = useRouter();
-  const { items, storeName: draftStoreName, updateStoreName, updateItem, addItem, removeItem, clearDraft, isOffline, rawSubtotal, pricing, updatePricing } = useOfflineGroceryDraft(tripId, initialItems, storeName);
+  const { items, storeName: draftStoreName, updateStoreName, updateItem, addItem, removeItem, saveDraft, clearDraft, isOffline, rawSubtotal, pricing, updatePricing } = useOfflineGroceryDraft(tripId, initialItems, storeName);
   
   const { taxAndFees, discounts, manualTotal } = pricing;
   const [loading, setLoading] = useState(false);
@@ -28,6 +28,21 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
     if (!newItemName.trim()) return;
     addItem(newItemName.trim());
     setNewItemName('');
+  };
+
+  const handleLater = () => {
+    setError('');
+    try {
+      if (newItemName.trim()) {
+        setNewItemName('');
+        addItem(newItemName.trim());
+      }
+      saveDraft();
+    } catch {
+      setError('Unable to save your grocery list on this device. Please try again before leaving.');
+      return;
+    }
+    router.push('/groceries');
   };
 
   const handleCheckout = async () => {
@@ -265,6 +280,17 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
             'Save Prices Without Total'
           )}
         </button>
+        <button
+          type="button"
+          onClick={handleLater}
+          disabled={loading}
+          className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 font-bold text-slate-200 hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Later
+        </button>
+        <p className="text-center text-xs text-slate-400">
+          Save this list on this device and resume it from the groceries page.
+        </p>
       </div>
 
     </div>
