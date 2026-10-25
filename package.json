@@ -1,14 +1,14 @@
 {
   "name": "navia",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:mobile": "playwright test --config e2e/mobile-layout.config.ts",
-    "test:analyze": "node --test tests/analyze.test.mjs && playwright test --config e2e/analyze.config.ts"
+    "test": "node --test tests/*.test.mjs",
+    "test:mobile": "playwright test --config e2e/mobile-layout.config.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

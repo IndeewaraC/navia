@@ -4,8 +4,7 @@ import { z } from 'zod';
 
 const FundSchema = z.object({
   project_id: z.string().uuid(),
-  source_account_id: z.string().uuid(),
-  amount: z.number().positive(),
+  amount: z.number().positive().multipleOf(0.01),
 });
 
 export async function POST(request: Request) {
@@ -20,67 +19,40 @@ export async function POST(request: Request) {
     const body = await request.json();
     const parsedData = FundSchema.parse(body);
 
-    // 1. Verify source account has enough funds (optional but good practice)
-    const { data: account, error: accError } = await supabase
-      .from('payment_accounts')
-      .select('current_statement_balance')
-      .eq('account_id', parsedData.source_account_id)
-      .eq('user_id', user.id)
-      .single();
-
-    if (accError || !account) throw new Error('Source account not found.');
-    if (account.current_statement_balance < parsedData.amount) {
-      throw new Error('Insufficient funds in the source account.');
-    }
-
-    // 2. Log the funding transaction (exempt from operational budget caps)
-    const { data: transaction, error: txnError } = await supabase
-      .from('transactions')
-      .insert({
-        user_id: user.id,
-        source_account_id: parsedData.source_account_id,
-        exempt_project_id: parsedData.project_id,
-        txn_type: 'TRANSFER',
-        amount: parsedData.amount,
-        transaction_date: new Date().toISOString().split('T')[0],
-        category: 'Exempt Project Funding',
-        is_budget_cap_exempt: true, // Core BRD requirement!
-      })
-      .select('transaction_id')
-      .single();
-
-    if (txnError) throw new Error('Failed to record funding transaction.');
-
-    // 3. Update the project's saved amount
-    // Ideally this is done via a PostgreSQL function (RPC) or trigger to avoid race conditions,
-    // but we can do a simple read/update here for the MVP.
-    const { data: project } = await supabase
+    // A contribution records project progress only. No payment account or
+    // operational-budget transaction is involved.
+    const { data: project, error: projectError } = await supabase
       .from('exempt_projects')
       .select('saved_amount')
       .eq('project_id', parsedData.project_id)
-      .single();
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-    const newSaved = Number((project?.saved_amount || 0)) + parsedData.amount;
+    if (projectError) throw new Error('Unable to load project funds.');
+    if (!project) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
 
-    const { error: updateError } = await supabase
+    const newSaved = (Math.round(Number(project.saved_amount) * 100) + Math.round(parsedData.amount * 100)) / 100;
+    // Compare the previously read amount so simultaneous contributions cannot
+    // silently overwrite each other. A conflict can be retried after refreshing.
+    const { data: updatedProject, error: updateError } = await supabase
       .from('exempt_projects')
       .update({ saved_amount: newSaved })
-      .eq('project_id', parsedData.project_id);
+      .eq('project_id', parsedData.project_id)
+      .eq('user_id', user.id)
+      .eq('saved_amount', project.saved_amount)
+      .select('project_id, saved_amount')
+      .maybeSingle();
 
-    if (updateError) throw new Error('Failed to update project balance.');
-
-    // 4. Update the checking account balance (deduct the funds)
-    const newBalance = account.current_statement_balance - parsedData.amount;
-    await supabase
-      .from('payment_accounts')
-      .update({ current_statement_balance: newBalance })
-      .eq('account_id', parsedData.source_account_id);
-
-    return NextResponse.json({ message: 'Project funded successfully' }, { status: 200 });
+    if (updateError) throw new Error('Failed to record project funds.');
+    if (!updatedProject) {
+      return NextResponse.json({ error: 'Project funds changed. Refresh and try again.' }, { status: 409 });
+    }
+    return NextResponse.json({ message: 'Project funds recorded successfully', project: updatedProject }, { status: 200 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues.map(e => e.message).join(', ') }, { status: 400 });
     }
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    if (error instanceof SyntaxError) return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to record project funds.' }, { status: 500 });
   }
 }

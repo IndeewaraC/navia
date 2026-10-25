@@ -14,14 +14,13 @@ interface Project {
 }
 
 interface VaultClientProps {
-  vaultAccount: any;
-  checkingAccount: any;
+  vaultAccount: { current_statement_balance: number } | null;
   initialProjects: Project[];
 }
 
-export default function VaultClient({ vaultAccount, checkingAccount, initialProjects }: VaultClientProps) {
+export default function VaultClient({ vaultAccount, initialProjects }: VaultClientProps) {
   const router = useRouter();
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const projects = initialProjects;
   
   // Modal States
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -57,7 +56,7 @@ export default function VaultClient({ vaultAccount, checkingAccount, initialProj
             <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Emergency Runway</span>
             <div className="flex items-end gap-2">
               <span className="text-4xl font-extrabold text-indigo-400 tracking-tight">
-                ${vaultAccount ? vaultAccount.current_balance.toFixed(2) : '0.00'}
+                ${Number(vaultAccount?.current_statement_balance || 0).toFixed(2)}
               </span>
               <span className="text-sm font-medium text-slate-400 mb-1">secured</span>
             </div>
@@ -156,7 +155,6 @@ export default function VaultClient({ vaultAccount, checkingAccount, initialProj
       {fundProject && (
         <FundProjectModal 
           project={fundProject}
-          checkingAccount={checkingAccount}
           onClose={() => setFundProject(null)} 
           onSuccess={handleProjectSaved}
         />
