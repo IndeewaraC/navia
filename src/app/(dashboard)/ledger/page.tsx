@@ -5,6 +5,8 @@ import MagicMonthBanner from '@/src/components/dashboard/MagicMonthBanner';
 import TotalSpendCard from '@/src/components/dashboard/TotalSpendCard';
 import { fetchSpendingTransactions } from '@/src/lib/analyze';
 import { calculateSpendingTotals } from '@/src/lib/spendingTotals';
+import { getBudgetCycleStatus } from '@/src/lib/budgetCycle';
+import { formatCalendarDate } from '@/src/lib/calendarDateDisplay';
 
 export default async function DashboardPage() {
   // Await createClient() as mandated by Next.js 15+ cookies() async restrictions
@@ -28,28 +30,27 @@ export default async function DashboardPage() {
     .eq('user_id', user.id);
 
   // Fetch the User's Profile for the Display Name
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('display_name')
+    .select('display_name, anchor_pay_date')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
+
+  if (profileError) throw new Error('Unable to load the configured pay cycle.');
     
   const dashboardTitle = profile?.display_name ? `${profile.display_name}'s Vault` : 'Command Center';
 
   // 2. Fetch Active Cycle Status
-  const { data: cycleData } = await supabase.rpc('get_pay_cycle_status', { p_user_id: user.id });
+  const cycleData = await getBudgetCycleStatus(supabase, user, profile?.anchor_pay_date);
 
   // 3. Fetch Spend Data for the Current Cycle
-  // Use cycle start if available, otherwise fallback to the 1st of the current month
-  const today = new Date().toISOString().slice(0, 10);
-  let effectiveStartDate = `${today.slice(0, 7)}-01`;
-  const isMissingAnchor = !cycleData || cycleData.error;
-  
-  if (!isMissingAnchor && cycleData?.cycle_start) {
-    effectiveStartDate = cycleData.cycle_start.slice(0, 10);
-  }
-
-  const txns = await fetchSpendingTransactions(supabase, user.id, { startDate: effectiveStartDate, endDate: today });
+  const isMissingAnchor = !cycleData.is_configured;
+  const txns = await fetchSpendingTransactions(supabase, user.id, {
+    startDate: cycleData.cycle_start,
+    endDate: cycleData.spend_end,
+  }).catch(() => {
+    throw new Error('Unable to load spending for the active pay cycle.');
+  });
   const spending = calculateSpendingTotals(txns);
   const operationalSpend = spending.operational;
   const exemptSpend = spending.exempt;
@@ -77,6 +78,12 @@ export default async function DashboardPage() {
       <header className="mb-8">
         <h1 className="text-2xl font-black tracking-tight text-slate-100">{dashboardTitle}</h1>
         <p className="text-slate-400 font-medium text-sm">Active Cycle Overview</p>
+        <p className="text-slate-500 text-xs mt-2">
+          Current cycle started: {cycleData.cycle_start}
+          {cycleData.next_pay_date
+            ? ` · Next reset: ${cycleData.next_pay_date} at midnight (Winnipeg)`
+            : ' · Choose your next reset date in Settings. Spending carries forward until then.'}
+        </p>
       </header>
 
       <MagicMonthBanner isMagicMonth={cycleData?.is_magic_month || false} />
@@ -129,6 +136,9 @@ export default async function DashboardPage() {
       {accounts && accounts.length > 0 && (
         <section>
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 px-2">Active Funding Sources</h2>
+          <p className="text-xs text-slate-500 mb-3 px-2">
+            Spending from {cycleData.cycle_start} through {cycleData.spend_end}.
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {accounts.map(acc => {
               const accountSpend = spending.perAccount.get(acc.account_id) || { operational: 0, exempt: 0, total: 0 };
@@ -164,7 +174,7 @@ export default async function DashboardPage() {
           <div>
             <h3 className="text-amber-400 font-bold text-sm">Pay Cycle Not Aligned</h3>
             <p className="text-amber-500/80 text-xs mt-1">
-              You haven&apos;t set your Anchor Pay Date in Settings. Navia is temporarily using the 1st of the month for calculations.
+              Choose your next reset date in Settings. Your spending carries forward until the date you select.
             </p>
           </div>
         </div>
@@ -172,7 +182,7 @@ export default async function DashboardPage() {
 
       {/* Early Cycle Warning Injection */}
       {cycleData && cycleData.is_magic_month && (accounts || []).length > 0 && (
-        <EarlyCycleWarnings userId={user.id} />
+        <EarlyCycleWarnings cycle={cycleData} />
       )}
 
       {/* Recent Feed */}
@@ -187,7 +197,7 @@ export default async function DashboardPage() {
                   <div className="flex flex-col">
                     <span className="font-bold text-slate-200">{txn.category}</span>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-slate-500">{new Date(`${txn.transaction_date.slice(0, 10)}T00:00:00`).toLocaleDateString()}</span>
+                      <span className="text-xs text-slate-500">{formatCalendarDate(txn.transaction_date)}</span>
                       <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-800/50 border border-slate-700 px-1.5 py-0.5 rounded-md">
                         {accountAlias}
                       </span>

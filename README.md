@@ -1,3 +1,37 @@
+Navia Engine ⚡️
+Navia is a privacy-first, self-managed financial tracking web application. Built on the concept of a "Zero-Trust Privacy Vault," it empowers users to manually track their daily operational expenses, manage multi-stop grocery lists, and allocate funds to custom savings goals without ever linking to a real-world bank account or sacrificing sensitive data.
+
+Whether you want to stop overspending on credit cards, avoid "checkout shock" at the grocery store, or simply take manual ownership of your financial history, Navia provides a clean, visual command center to keep your spending on track.
+
+Core Features
+Zero Bank Integrations: Absolute privacy. You manage your ledger manually; no bank logins, no external syncing, and no scraped data. You can even use dummy names for ultimate anonymity.
+
+Custom Payment Methods: Define your own funding sources (e.g., Everyday Rewards Card, Cash Wallet) and set strict routine monthly limits for each.
+
+Dual-Layer Budgeting: Visually track your daily "safe-to-spend" runway via a live color-coded gauge (Emerald → Amber → Rose) independently from your fixed bills.
+
+Offline-Ready Groceries: Build shopping lists, track per-item prices, and monitor your cart total in real-time, even in supermarket cell reception dead zones.
+
+The Stability Vault: Shield funds for long-term goals or unexpected expenses (like car repairs) from your daily operational budget using exempt projects.
+
+Project contributions are manual tracking entries. **Add Funds** increases a project's saved amount without requiring a checking account, deducting an account balance, or creating a ledger transfer. Operational budgets and existing financial history are unaffected.
+
+Receipt and ledger dates display the recorded calendar day consistently across browser time zones. Date-only values are not converted into the previous day's local time.
+
+Monthly Reset Dates: Choose the exact date for each month's next budget reset. Spending carries forward until midnight in Winnipeg on that date. Changing the next date preserves the current cycle start; transaction history remains available after a reset. After the chosen date, set your next reset in Settings. No extra 14-day or calendar-month resets are inferred.
+
+The current cycle start is saved as the `navia_budget_cycle_start` user preference using Supabase Auth metadata. Existing monthly configurations initialize from the previous month's matching date once. Dashboard totals and expense alerts share this saved start and the same Winnipeg calendar date; no database schema migration is required.
+
+Settings also exposes **Current Cycle Start Date** for correcting an inferred start or including earlier transactions. A past Anchor Pay Date is authoritative even if a later start was previously saved. For example, an October 2 anchor includes October 2 through today in both operational spending and each funding source's remaining limit. A future Anchor Pay Date schedules the next reset without moving the chosen current start.
+
+## Issues and releases
+
+Use [GitHub Issues](https://github.com/IndeewaraC/navia/issues) to report and track bugs. Each release tracker links its bug reports, acceptance criteria, validation and production commit. Close bug reports after the deployment succeeds and the evidence is recorded.
+
+- [Release 0.1.1 — receipt dates and manual project funding](https://github.com/IndeewaraC/navia/issues/10): #11 and #12.
+- [Previous production budget-cycle hotfixes](https://github.com/IndeewaraC/navia/issues/6): #7, #8 and #9.
+- [Release history](CHANGELOG.md).
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

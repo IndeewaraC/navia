@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/src/lib/supabase/client';
+import { getPayCycleStatus, isCalendarDate, localCalendarDate } from '@/src/lib/payCycleDates';
 
 type PaymentAccount = {
   account_id: string;
@@ -12,19 +13,32 @@ type PaymentAccount = {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [anchorDate, setAnchorDate] = useState('');
+  const [cycleStartDate, setCycleStartDate] = useState('');
+  const [configError, setConfigError] = useState('');
+  const [configSaved, setConfigSaved] = useState(false);
   
   // Payment Accounts State
   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
   const [newAlias, setNewAlias] = useState('');
   const [newLimit, setNewLimit] = useState('');
   const [isAddingMode, setIsAddingMode] = useState(false);
+
+  const fetchAccounts = useCallback(async (uid: string) => {
+    const { data } = await supabase
+      .from('payment_accounts')
+      .select('account_id, account_alias, routine_monthly_limit')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: true });
+
+    if (data) setAccounts(data as PaymentAccount[]);
+  }, [supabase]);
 
   useEffect(() => {
     async function loadUserData() {
@@ -44,37 +58,63 @@ export default function SettingsPage() {
           if (profile.anchor_pay_date) setAnchorDate(profile.anchor_pay_date);
           if (profile.display_name) setDisplayName(profile.display_name);
         }
+        setCycleStartDate(getPayCycleStatus(profile?.anchor_pay_date, new Date(), user.user_metadata?.navia_budget_cycle_start).cycle_start);
 
         // Load Payment Accounts
         fetchAccounts(user.id);
       }
     }
     loadUserData();
-  }, [supabase]);
-
-  const fetchAccounts = async (uid: string) => {
-    const { data } = await supabase
-      .from('payment_accounts')
-      .select('account_id, account_alias, routine_monthly_limit')
-      .eq('user_id', uid)
-      .order('created_at', { ascending: true });
-      
-    if (data) setAccounts(data as PaymentAccount[]);
-  };
+  }, [supabase, fetchAccounts]);
 
   const handleSaveConfig = async () => {
     if (!userId) return;
+    setConfigError('');
+    setConfigSaved(false);
+    if (!isCalendarDate(anchorDate)) {
+      setConfigError('Choose a valid reset date.');
+      return;
+    }
+    if (!isCalendarDate(cycleStartDate) || cycleStartDate > localCalendarDate()) {
+      setConfigError('Choose today or a past date for the current cycle start.');
+      return;
+    }
     setLoading(true);
-    await supabase
-      .from('profiles')
-      .upsert({ 
-        id: userId, 
-        anchor_pay_date: anchorDate,
-        display_name: displayName,
-        username: userEmail.split('@')[0]
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user || user.id !== userId) throw new Error('Please sign in again to save your reset date.');
+
+      const { data: currentProfile, error: profileError } = await supabase
+        .from('profiles').select('anchor_pay_date').eq('id', userId).maybeSingle();
+      if (profileError) throw new Error('Unable to load your current reset date.');
+      const currentCycle = getPayCycleStatus(currentProfile?.anchor_pay_date, new Date(), user.user_metadata?.navia_budget_cycle_start);
+      // A past anchor establishes the current cycle. A future anchor schedules
+      // the next reset while retaining the independently chosen current start.
+      const nextStart = anchorDate <= localCalendarDate() ? anchorDate : cycleStartDate;
+      const { error: cycleError } = await supabase.auth.updateUser({
+        data: { navia_budget_cycle_start: nextStart },
       });
-    setLoading(false);
-    alert('Profile configuration updated.');
+      if (cycleError) throw new Error('Unable to preserve your current spending. Reset date was not changed.');
+
+      const { error: saveError } = await supabase.from('profiles').upsert({
+        id: userId, anchor_pay_date: anchorDate, display_name: displayName,
+        username: userEmail.split('@')[0],
+      });
+      if (saveError) {
+        const { error: restoreError } = await supabase.auth.updateUser({
+          data: { navia_budget_cycle_start: currentCycle.cycle_start },
+        });
+        if (restoreError) throw new Error('Configuration could not be saved or the prior cycle start restored. Reload Settings and check the current cycle start.');
+        throw new Error('Unable to save configuration. Your current cycle was kept. Please try again.');
+      }
+      setCycleStartDate(nextStart);
+      setConfigSaved(true);
+      router.refresh();
+    } catch (error) {
+      setConfigError(error instanceof Error ? error.message : 'Unable to save configuration.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAddAccount = async () => {
@@ -176,16 +216,40 @@ export default function SettingsPage() {
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors mb-6"
               />
 
-              <label className="block text-sm font-bold text-slate-300 mb-2">
-                Anchor Pay Date
+              <label htmlFor="cycle-start-date" className="block text-sm font-bold text-slate-300 mb-2">
+                Current Cycle Start Date
               </label>
               <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                The date of your first paycheck. Navia uses this to calculate your floating 14-day cycles and intelligently predict Magic Months.
+                Spending from this date, including that day, counts toward your budget and funding source limits. Set an earlier date here to include existing transactions.
               </p>
               <input
                 type="date"
+                id="cycle-start-date"
+                value={cycleStartDate}
+                max={localCalendarDate()}
+                onChange={(e) => {
+                  setCycleStartDate(e.target.value);
+                  if (anchorDate && anchorDate <= localCalendarDate()) setAnchorDate(e.target.value);
+                  setConfigSaved(false); setConfigError('');
+                }}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors mb-6"
+              />
+
+              <label htmlFor="anchor-pay-date" className="block text-sm font-bold text-slate-300 mb-2">
+                Anchor Pay Date
+              </label>
+              <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                Choose the exact date for your next monthly reset. A past date establishes your current cycle start. A future date schedules the next reset at midnight in Winnipeg and keeps the current cycle start above.
+              </p>
+              <input
+                type="date"
+                id="anchor-pay-date"
                 value={anchorDate}
-                onChange={(e) => setAnchorDate(e.target.value)}
+                onChange={(e) => {
+                  setAnchorDate(e.target.value);
+                  if (e.target.value && e.target.value <= localCalendarDate()) setCycleStartDate(e.target.value);
+                  setConfigSaved(false); setConfigError('');
+                }}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
               />
             </div>
@@ -197,6 +261,8 @@ export default function SettingsPage() {
             >
               {loading ? 'Saving...' : 'Save Configuration'}
             </button>
+            {configError && <p role="alert" className="text-sm text-rose-400">{configError}</p>}
+            {configSaved && <p role="status" className="text-sm text-emerald-400">Configuration saved.</p>}
           </div>
         </div>
 

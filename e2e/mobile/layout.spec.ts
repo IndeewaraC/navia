@@ -68,6 +68,66 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
 
+for (const timezoneId of ['America/Winnipeg', 'UTC', 'Pacific/Kiritimati']) {
+  test(`receipt list and details preserve October 20 in ${timezoneId}`, async ({ browser }) => {
+    const context = await browser.newContext({ timezoneId, viewport: { width: 390, height: 844 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseURL}/groceries/receipt-test`);
+      const card = page.getByRole('button', { name: 'View receipt for costco-20/10' });
+      await expect(card).toContainText('Oct 20, 2026');
+      await card.click();
+      const dialog = page.getByRole('dialog', { name: 'Receipt for costco-20/10' });
+      await expect(dialog).toContainText('Oct 20, 2026');
+      await expect(dialog).not.toContainText('Oct 19');
+      await expect(dialog).toContainText('$20.00');
+      await page.getByRole('button', { name: 'Close receipt' }).click();
+      await expect(dialog).toBeHidden();
+      await expectNoHorizontalOverflow(page);
+    } finally { await context.close(); }
+  });
+}
+
+test('recording project funds needs no checking account and refreshes project progress', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${baseURL}/vault`);
+  await page.getByRole('button', { name: '+ Add Funds' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add Project Funds' });
+  await expect(dialog).toContainText('tracking only');
+  await page.getByRole('spinbutton', { name: 'Amount to Record ($)' }).fill('40');
+  await page.route('**/api/vault/fund', async route => {
+    const body = route.request().postDataJSON();
+    expect(body).toEqual({ project_id: '00000000-0000-4000-8000-000000000002', amount: 40 });
+    await page.evaluate(() => localStorage.setItem('navia-project-service-fixture', '40'));
+    await route.fulfill({ status: 200, json: { message: 'Project funds recorded successfully', project: { saved_amount: 40 } } });
+  });
+  await dialog.getByRole('button', { name: 'Record Funds' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('$40.00', { exact: true })).toBeVisible();
+  await expect(page.getByText('16% Funded', { exact: true })).toBeVisible();
+  await expect(page.getByText('$0.00', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('16% Funded', { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  expect(errors).toEqual([]);
+});
+
+test('failed project contribution shows an error without claiming the funds were recorded', async ({ page }) => {
+  await page.goto(`${baseURL}/vault`);
+  await page.getByRole('button', { name: '+ Add Funds' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add Project Funds' });
+  await page.getByRole('spinbutton', { name: 'Amount to Record ($)' }).fill('40');
+  await page.route('**/api/vault/fund', route => route.fulfill({ status: 500, json: { error: 'Failed to record project funds.' } }));
+  await dialog.getByRole('button', { name: 'Record Funds' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText('Failed to record project funds.');
+  await expect(dialog).toBeVisible();
+  await expect(page.getByText('0% Funded', { exact: true })).toBeVisible();
+  await expect(page.getByRole('spinbutton', { name: 'Amount to Record ($)' })).toHaveValue('40');
+  await expect(dialog.getByRole('button', { name: 'Record Funds' })).toBeEnabled();
+});
+
 async function expectPriceAccessible(input: Locator, viewportWidth: number) {
   await input.scrollIntoViewIfNeeded();
   const bounds = await input.boundingBox();
@@ -341,4 +401,112 @@ test('only one Magic Month banner appears and disappears after exactly one minut
   await expect(banner).toHaveCount(0);
   await page.goto(`${baseURL}/ledger?normal`);
   await expect(banner).toHaveCount(0);
+});
+
+test('an evening expense keeps its Winnipeg date after UTC midnight', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-23T02:00:00Z') });
+  await page.goto(`${baseURL}/ledger`);
+  await page.getByRole('button', { name: 'Add Expense', exact: true }).click();
+  await page.getByPlaceholder('0.00').fill('15');
+  await page.getByPlaceholder('Merchant or Shop...').fill('Payday boundary test');
+  await page.route('**/api/transactions', route => route.fulfill({ status: 201, json: { transaction: { transaction_id: 'boundary-expense' } } }));
+  const requestPromise = page.waitForRequest('**/api/transactions');
+  await page.getByRole('button', { name: 'Log Expense', exact: true }).click();
+  expect((await requestPromise).postDataJSON().transaction_date).toBe('2026-10-22');
+});
+
+test('an evening grocery receipt keeps its Winnipeg date after UTC midnight', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-23T02:00:00Z') });
+  await page.goto(`${baseURL}/groceries/active`);
+  await page.getByRole('textbox', { name: 'New grocery item' }).fill('Milk');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Final total', exact: true }).fill('10');
+  await page.route('**/api/groceries/receipt', route => route.fulfill({ status: 201, json: { trip_id: 'boundary-receipt' } }));
+  const requestPromise = page.waitForRequest('**/api/groceries/receipt');
+  await page.getByRole('button', { name: 'Save Receipt', exact: true }).click();
+  expect((await requestPromise).postDataJSON().trip_date).toBe('2026-10-22');
+});
+
+test('changing the monthly reset date keeps the existing cycle start and persists after refresh', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/settings`);
+  const resetDate = page.getByLabel('Anchor Pay Date');
+  await expect(resetDate).toHaveValue('2026-11-14');
+  await expect(page.getByText(/Choose the exact date for your next monthly reset/)).toBeVisible();
+  await resetDate.fill('2026-11-21');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('status')).toHaveText('Configuration saved.');
+  expect(await page.evaluate(() => window.__naviaResetFixture.metadata.navia_budget_cycle_start)).toBe('2026-10-14');
+  await page.reload();
+  await expect(resetDate).toHaveValue('2026-11-21');
+  await expectNoHorizontalOverflow(page);
+});
+
+test('setting next month after a reset preserves the actual last reset date', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-11-15T18:00:00Z') });
+  await page.goto(`${baseURL}/settings`);
+  await expect(page.getByLabel('Anchor Pay Date')).toHaveValue('2026-11-14');
+  await page.getByLabel('Anchor Pay Date').fill('2026-12-05');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('status')).toHaveText('Configuration saved.');
+  expect(await page.evaluate(() => window.__naviaResetFixture.metadata.navia_budget_cycle_start)).toBe('2026-11-14');
+});
+
+for (const failure of ['save-error', 'metadata-error']) {
+  test(`a ${failure} cannot report success or change the saved reset date`, async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+    await page.goto(`${baseURL}/settings?${failure}`);
+    await expect(page.getByLabel('Anchor Pay Date')).toHaveValue('2026-11-14');
+    await page.getByLabel('Anchor Pay Date').fill('2026-11-21');
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('status')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__naviaResetFixture.profile.anchor_pay_date)).toBe('2026-11-14');
+    expect(await page.evaluate(() => window.__naviaResetFixture.profileWrites)).toBe(0);
+  });
+}
+
+test('an October 2 past anchor is accepted and establishes the current cycle start', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.goto(`${baseURL}/settings`);
+  await expect(page.getByLabel('Anchor Pay Date')).toHaveValue('2026-11-14');
+  await page.getByLabel('Anchor Pay Date').fill('2026-10-02');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('status')).toHaveText('Configuration saved.');
+  expect(await page.evaluate(() => window.__naviaResetFixture.metadata.navia_budget_cycle_start)).toBe('2026-10-02');
+  await page.reload();
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-02');
+});
+
+test('October 2 can be restored while retaining the November 14 next reset', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.goto(`${baseURL}/settings`);
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-14');
+  await page.getByLabel('Current Cycle Start Date').fill('2026-10-02');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('status')).toHaveText('Configuration saved.');
+  await page.reload();
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-02');
+  await expect(page.getByLabel('Anchor Pay Date')).toHaveValue('2026-11-14');
+});
+
+test('a failed profile save restores the prior cycle start after an earlier date was entered', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.goto(`${baseURL}/settings?save-error`);
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-14');
+  await page.getByLabel('Current Cycle Start Date').fill('2026-10-02');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('alert')).toContainText('Your current cycle was kept');
+  expect(await page.evaluate(() => window.__naviaResetFixture.metadata.navia_budget_cycle_start)).toBe('2026-10-14');
+});
+
+test('a current cycle start in the future is rejected', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T02:00:00Z') });
+  await page.goto(`${baseURL}/settings`);
+  await expect(page.getByLabel('Current Cycle Start Date')).toHaveValue('2026-10-14');
+  await page.getByLabel('Current Cycle Start Date').fill('2026-11-01');
+  await page.getByRole('button', { name: 'Save Configuration' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Choose today or a past date for the current cycle start.');
+  expect(await page.evaluate(() => window.__naviaResetFixture.profileWrites)).toBe(0);
 });

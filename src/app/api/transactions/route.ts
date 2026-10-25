@@ -1,6 +1,7 @@
 import { createClient } from '@/src/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getBudgetCycleStatus } from '@/src/lib/budgetCycle';
 
 // Zero-Trust Payload Validation
 const TransactionSchema = z.object({
@@ -36,29 +37,39 @@ export async function POST(request: Request) {
         .from('payment_accounts')
         .select('routine_monthly_limit')
         .eq('account_id', parsedData.source_account_id)
+        .eq('user_id', user.id)
         .single();
 
       if (account && account.routine_monthly_limit > 0) {
-        // Calculate the current operational spend for the active 14-day cycle
-        // Note: In production, cycle start/end dates would be dynamically calculated based on the user's anchor_pay_date. 
-        // For Sprint 1, we aggregate all non-exempt expenses for the current month.
-        const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-        
-        const { data: currentSpend } = await supabase
+        // Match the dashboard's current cycle and explicitly selected reset.
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('anchor_pay_date')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (profileError) {
+          return NextResponse.json({ error: 'Unable to load the configured pay cycle.' }, { status: 500 });
+        }
+        const cycle = await getBudgetCycleStatus(supabase, user, profile?.anchor_pay_date);
+        const { data: currentSpend, error: spendError } = await supabase
           .from('transactions')
           .select('amount')
+          .eq('user_id', user.id)
           .eq('source_account_id', parsedData.source_account_id)
           .eq('txn_type', 'EXPENSE')
           .eq('is_budget_cap_exempt', false)
-          .gte('transaction_date', startOfMonth);
+          .gte('transaction_date', cycle.cycle_start)
+          .lte('transaction_date', cycle.spend_end);
+        if (spendError) return NextResponse.json({ error: 'Unable to calculate current spending.' }, { status: 500 });
 
-        const totalOperationalSpend = (currentSpend?.reduce((sum, txn) => sum + Number(txn.amount), 0) || 0) + parsedData.amount;
+        const isInActiveCycle = parsedData.transaction_date >= cycle.cycle_start && parsedData.transaction_date <= cycle.spend_end;
+        const totalOperationalSpend = (currentSpend?.reduce((sum, txn) => sum + Number(txn.amount), 0) || 0) + (isInActiveCycle ? parsedData.amount : 0);
         const spendPercentage = (totalOperationalSpend / account.routine_monthly_limit) * 100;
 
         // Generate Navia threshold warnings
-        if (spendPercentage >= 100) {
+        if (isInActiveCycle && spendPercentage >= 100) {
           thresholdAlert = { level: 'BREACH', message: '100% Operational Limit Exceeded', current_spend: totalOperationalSpend };
-        } else if (spendPercentage >= 80) {
+        } else if (isInActiveCycle && spendPercentage >= 80) {
           thresholdAlert = { level: 'WARNING', message: '80% Operational Limit Reached', current_spend: totalOperationalSpend };
         }
       }

@@ -1,5 +1,6 @@
 'use client';
 
+import { localCalendarDate } from '@/src/lib/payCycleDates';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOfflineGroceryDraft, GroceryItem } from '@/src/hooks/useOfflineGroceryDraft';
@@ -65,7 +66,7 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           store_name: draftStoreName || 'Unnamed Store',
-          trip_date: new Date().toISOString().split('T')[0],
+          trip_date: localCalendarDate(),
           raw_subtotal: rawSubtotal,
           tax_and_fees: taxAndFees,
           discount_amount: discounts,

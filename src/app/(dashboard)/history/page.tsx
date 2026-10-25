@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/src/lib/supabase/client';
+import { formatCalendarDate } from '@/src/lib/calendarDateDisplay';
 
 type Transaction = {
   transaction_id: string;
@@ -90,7 +91,7 @@ export default function HistoryPage() {
                   <span className="font-semibold text-slate-200">{txn.category}</span>
                   <div className="flex items-center space-x-2 mt-1">
                     <span className="text-xs text-slate-500">
-                      {new Date(`${txn.transaction_date.slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {formatCalendarDate(txn.transaction_date)}
                       {' · '}
                       {new Date(txn.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </span>

@@ -1,6 +1,7 @@
 import { createClient } from '@/src/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { localCalendarDate } from '@/src/lib/payCycleDates';
 
 const MagicMonthRoutingSchema = z.object({
   source_account_id: z.string().uuid({ message: "Invalid source account" }),
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
         source_account_id: parsedData.source_account_id,
         txn_type: 'TRANSFER',
         amount: parsedData.amount,
-        transaction_date: new Date().toISOString().split('T')[0],
+        transaction_date: localCalendarDate(),
         category: '✨ Magic Month Surplus Routing',
         is_budget_cap_exempt: true, 
       })

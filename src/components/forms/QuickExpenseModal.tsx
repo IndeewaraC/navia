@@ -1,5 +1,6 @@
 'use client';
 
+import { localCalendarDate } from '@/src/lib/payCycleDates';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/src/lib/supabase/client';
@@ -117,7 +118,7 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
           source_account_id: selectedAccountId,
           txn_type: 'EXPENSE',
           amount: parseFloat(amount),
-          transaction_date: new Date().toISOString().split('T')[0],
+          transaction_date: localCalendarDate(),
           category: merchantInput.trim(),
           is_budget_cap_exempt: isExempt,
           project_id: isExempt && selectedProjectId ? selectedProjectId : undefined,
