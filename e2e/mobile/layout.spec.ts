@@ -189,6 +189,101 @@ test('Later stays on the cart if saving the draft fails', async ({ page }) => {
   await expect(page).toHaveURL(`${baseURL}/groceries/active`);
 });
 
+test('a manual grocery total survives price adjustments and a failed save can be retried', async ({ page }) => {
+  await page.goto(`${baseURL}/groceries/active`);
+  for (const name of ['Milk', 'Bread', 'Rice']) {
+    await page.getByRole('textbox', { name: 'New grocery item' }).fill(name);
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+  }
+  const finalTotal = page.getByRole('spinbutton', { name: 'Final total', exact: true });
+  await finalTotal.fill('42.75');
+  await page.getByRole('spinbutton', { name: 'Taxes and fees' }).fill('2');
+  await expect(finalTotal).toHaveValue('42.75');
+  await page.getByRole('spinbutton', { name: 'Discounts' }).fill('1');
+  await page.getByRole('spinbutton', { name: 'Price for Milk' }).fill('4.5');
+  await expect(finalTotal).toHaveValue('42.75');
+  await page.reload();
+  await expect(finalTotal).toHaveValue('42.75');
+
+  const payloads: Array<Record<string, unknown>> = [];
+  await page.route('**/api/groceries/receipt', route => {
+    payloads.push(route.request().postDataJSON());
+    return route.fulfill(payloads.length === 1
+      ? { status: 503, json: { error: 'Please retry saving your receipt.' } }
+      : { status: 201, json: { trip_id: 'saved-trip' } });
+  });
+  const save = page.getByRole('button', { name: 'Save Receipt', exact: true });
+  await save.click();
+  await expect(page.getByText('Please retry saving your receipt.')).toBeVisible();
+  await expect(finalTotal).toHaveValue('42.75');
+  expect(await page.evaluate(() => localStorage.getItem('navia_grocery_draft_mobile-regression'))).not.toBeNull();
+  await save.click();
+  await expect(page).toHaveURL(`${baseURL}/groceries`);
+  expect(payloads).toHaveLength(2);
+  expect(payloads[1]).toMatchObject({ final_settled_total: 42.75, total_mode: 'manual', tax_and_fees: 2, discount_amount: 1 });
+  expect(await page.evaluate(() => localStorage.getItem('navia_grocery_draft_mobile-regression'))).toBeNull();
+});
+
+test('a limit breach allows consecutive expenses and does not disable the modal after reopening', async ({ page }) => {
+  await page.goto(`${baseURL}/ledger`);
+  const payloads: Array<Record<string, unknown>> = [];
+  await page.route('**/api/transactions', route => {
+    payloads.push(route.request().postDataJSON());
+    return route.fulfill({ status: 201, json: {
+      transaction: { transaction_id: `expense-${payloads.length}` },
+      threshold_alert: { level: 'BREACH', message: '100% Operational Limit Exceeded' },
+    } });
+  });
+  const open = page.getByRole('button', { name: 'Add Expense', exact: true });
+  await open.click();
+  const dialog = page.getByRole('dialog', { name: 'Log Expense', exact: true });
+  const submit = dialog.getByRole('button', { name: 'Log Expense', exact: true });
+  for (const amount of ['25', '15']) {
+    await page.getByPlaceholder('0.00').fill(amount);
+    await page.getByPlaceholder('Merchant or Shop...').fill('Over limit purchase');
+    await expect(submit).toBeEnabled();
+    await submit.click();
+    await expect(page.getByText('100% Operational Limit Exceeded', { exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder('0.00')).toHaveValue('');
+  }
+  await page.getByRole('button', { name: 'Close modal' }).click();
+  await open.click();
+  await page.getByPlaceholder('0.00').fill('10');
+  await page.getByPlaceholder('Merchant or Shop...').fill('Another purchase');
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect.poll(() => payloads.length).toBe(3);
+  expect(payloads.map(payload => payload.amount)).toEqual([25, 15, 10]);
+});
+
+test('the total spent card includes operational and exempt amounts on a small screen', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto(`${baseURL}/ledger`);
+  const card = page.getByRole('region', { name: 'Total spent', exact: true });
+  await expect(card).toContainText('$130.40');
+  await expect(card).toContainText('$100.10');
+  await expect(card).toContainText('$30.30');
+  await expectNoHorizontalOverflow(page);
+});
+
+test('the final grocery total can be replaced with a decimal or restored to the calculated total', async ({ page }) => {
+  await page.goto(`${baseURL}/groceries/active`);
+  for (const [name, price] of [['Milk', '4.50'], ['Bread', '5.25']]) {
+    await page.getByRole('textbox', { name: 'New grocery item' }).fill(name);
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await page.getByRole('spinbutton', { name: `Price for ${name}` }).fill(price);
+  }
+  const total = page.getByRole('spinbutton', { name: 'Final total', exact: true });
+  await expect(total).toHaveValue('9.75');
+  await total.fill('');
+  await total.pressSequentially('42.75');
+  await expect(total).toHaveValue('42.75');
+  await page.getByRole('spinbutton', { name: 'Taxes and fees' }).fill('2');
+  await expect(total).toHaveValue('42.75');
+  await page.getByRole('button', { name: 'Use calculated total' }).click();
+  await expect(total).toHaveValue('11.75');
+});
+
 for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 844 },

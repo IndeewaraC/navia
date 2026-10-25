@@ -13,8 +13,8 @@ DECLARE
     v_is_magic_month BOOLEAN;
 BEGIN
     -- Retrieve the user's base anchor pay date
-    SELECT anchor_pay_date INTO v_anchor_date 
-    FROM public.profiles 
+    SELECT anchor_pay_date INTO v_anchor_date
+    FROM public.profiles
     WHERE id = p_user_id;
 
     IF v_anchor_date IS NULL THEN
@@ -24,7 +24,7 @@ BEGIN
     -- Calculate current 14-day window using numeric division to prevent truncation towards zero
     v_days_since_anchor := v_current_date - v_anchor_date;
     v_cycles_passed := FLOOR(v_days_since_anchor::NUMERIC / 14.0);
-    
+
     v_cycle_start := v_anchor_date + (v_cycles_passed * 14);
     v_cycle_end := v_cycle_start + 13;
 

@@ -12,6 +12,7 @@ let supabase;
 const originalLoad = Module._load;
 let ActiveGroceryTripPage;
 let POST;
+let revalidatedPaths = [];
 
 // Exercise the real server page and receipt handler against a local data boundary.
 try {
@@ -25,6 +26,9 @@ try {
     if (specifier === '@/src/lib/groceryPricing') {
       return loadTypeScript('../src/lib/groceryPricing.ts');
     }
+    if (specifier === 'next/cache') {
+      return { revalidatePath: path => revalidatedPaths.push(path) };
+    }
     return originalLoad.call(this, specifier, ...args);
   };
   ActiveGroceryTripPage = loadTypeScript('../src/app/(dashboard)/groceries/active/page.tsx').default;
@@ -34,6 +38,7 @@ try {
 }
 
 function fixture(user = { id: 'grocery-user' }) {
+  revalidatedPaths = [];
   const writes = [];
   supabase = {
     auth: { getUser: async () => ({ data: { user }, error: null }) },
@@ -84,6 +89,8 @@ function submit(body) {
 for (const [mode, body] of [
   ['calculated', receipt],
   ['manual', { ...receipt, final_settled_total: 10, total_mode: 'manual' }],
+  ['manual total without item prices', { ...receipt, raw_subtotal: 0, final_settled_total: 42.75, total_mode: 'manual', tax_and_fees: 2, discount_amount: 1, items: [item('Milk', 0), item('Bread', 0), item('Rice', 0)] }],
+  ['manual total without items', { ...receipt, raw_subtotal: 0, final_settled_total: 26.19, total_mode: 'manual', items: [] }],
   ['partial prices', { ...receipt, raw_subtotal: 3, final_settled_total: null, total_mode: 'unknown', items: [item('Milk', 3), item('Bread', 0), item('Rice', 0)] }],
   ['legacy client', { ...receipt, source_account_id: '5f0b7d48-1f2c-4ef0-9e2e-531b4a1ba331' }],
 ]) {
@@ -96,6 +103,7 @@ for (const [mode, body] of [
     assert.equal(writes[0].row.final_settled_total, body.final_settled_total);
     assert.deepEqual(writes[0].row.receipt_items, body.items);
     assert.equal('source_account_id' in writes[0].row, false);
+    assert.deepEqual(revalidatedPaths, ['/groceries']);
   });
 }
 

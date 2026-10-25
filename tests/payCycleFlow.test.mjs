@@ -64,14 +64,16 @@ function fixture({ anchor = '2026-11-14', authenticated = true, profileError = f
     },
     rpc() { throw new Error('Budget flow must not depend on the old UTC database RPC'); },
     from(table) {
-      const query = { table, filters: [], limit: Infinity, insert: null };
+      const query = { table, filters: [], offset: 0, limit: Infinity, insert: null };
       const builder = {
         select() { return this; },
         eq(key, value) { query.filters.push([key, value, (a, b) => a === b]); return this; },
         gte(key, value) { query.filters.push([key, value, (a, b) => a >= b]); return this; },
         lte(key, value) { query.filters.push([key, value, (a, b) => a <= b]); return this; },
+        lt(key, value) { query.filters.push([key, value, (a, b) => a < b]); return this; },
         order() { return this; },
         limit(n) { query.limit = n; return this; },
+        range(from, to) { query.offset = from; query.limit = to - from + 1; return this; },
         insert(value) { query.insert = value; return this; },
         single() { return Promise.resolve(result(true)); },
         maybeSingle() { return Promise.resolve(result(true)); },
@@ -87,7 +89,7 @@ function fixture({ anchor = '2026-11-14', authenticated = true, profileError = f
           tables[table].push(row); writes.push(row);
           return { data: single ? row : [row], error: null };
         }
-        const rows = tables[table].filter(row => query.filters.every(([key, value, compare]) => compare(row[key], value))).slice(0, query.limit);
+        const rows = tables[table].filter(row => query.filters.every(([key, value, compare]) => compare(row[key], value))).slice(query.offset, query.offset + query.limit);
         return { data: single ? rows[0] || null : rows, error: null };
       }
       return builder;
@@ -248,8 +250,11 @@ test('October 2 anchors spending, each funding balance, and API alerts despite a
   assert.match(html, /\$152\.70/);
   assert.match(html, /\$247\.30/);
   assert.match(html, /\$400\.00/);
-  assert.match(html, /Operational spend: \$52\.70/);
-  assert.match(html, /Operational spend: \$100\.00/);
+  const text = html.replace(/<[^>]+>/g, ' ');
+  assert.match(text, /Operational spent\s+\$52\.70/);
+  assert.match(text, /Operational spent\s+\$100\.00/);
+  assert.match(text, /Exempt spent\s+\$15\.00/);
+  assert.match(html, /\$167\.70/);
   assert.equal(db.user.user_metadata.navia_budget_cycle_start, '2026-10-02');
   const response = await POST(expense(200));
   const body = await response.json();

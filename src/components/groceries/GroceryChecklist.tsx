@@ -20,6 +20,7 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [newItemName, setNewItemName] = useState('');
+  const [editingTotal, setEditingTotal] = useState<string | null>(null);
 
   const { total: finalTotal, error: pricingError } = calculateGroceryTotal(items, taxAndFees, discounts, manualTotal);
 
@@ -46,6 +47,7 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
   };
 
   const handleCheckout = async () => {
+    if (loading) return;
     if (pricingError) {
       setError(pricingError);
       return;
@@ -75,10 +77,11 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error || 'Unable to save your receipt. Please try again.');
 
       clearDraft();
       router.push('/groceries');
+      router.refresh();
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -98,6 +101,7 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
           <input 
             type="text"
             value={draftStoreName}
+            disabled={loading}
             onChange={(e) => updateStoreName(e.target.value)}
             className="text-2xl font-bold tracking-tight text-slate-100 bg-transparent border-b border-transparent hover:border-slate-700 focus:border-emerald-400 focus:outline-none transition-colors w-full pb-1"
             placeholder="Name this grocery run..."
@@ -127,6 +131,7 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <input 
                 type="checkbox"
+                disabled={loading}
                 aria-label={`Purchased ${item.name}`}
                 checked={item.isChecked}
                 onChange={(e) => updateItem(item.id, { isChecked: e.target.checked })}
@@ -141,6 +146,7 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
               <input 
                 type="number"
                 aria-label={`Price for ${item.name}`}
+                disabled={loading}
                 step="0.01"
                 min="0"
                 value={item.shelfPrice || ''}
@@ -152,6 +158,8 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
                 placeholder="0.00"
               />
               <button 
+                type="button"
+                disabled={loading}
                 onClick={() => removeItem(item.id)}
                 className="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors ml-1"
                 aria-label={`Remove ${item.name}`}
@@ -174,6 +182,7 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
           <input
             type="text"
             aria-label="New grocery item"
+            disabled={loading}
             value={newItemName}
             onChange={(e) => setNewItemName(e.target.value)}
             placeholder="Add new item..."
@@ -181,7 +190,7 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
           />
           <button 
             type="submit"
-            disabled={!newItemName.trim()}
+            disabled={loading || !newItemName.trim()}
             className="shrink-0 px-4 py-3 bg-slate-800 text-emerald-400 font-bold rounded-xl border border-slate-700 hover:bg-slate-700 hover:border-slate-600 disabled:opacity-50 transition-colors"
           >
             Add
@@ -205,7 +214,8 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
               min="0"
               value={taxAndFees || ''}
               aria-label="Taxes and fees"
-              onChange={(e) => updatePricing({ taxAndFees: parseFloat(e.target.value) || 0, manualTotal: null })}
+              disabled={loading}
+              onChange={(e) => updatePricing({ taxAndFees: parseFloat(e.target.value) || 0 })}
               className="w-20 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-right text-slate-100 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-colors"
               placeholder="0.00"
             />
@@ -222,7 +232,8 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
               min="0"
               value={discounts || ''}
               aria-label="Discounts"
-              onChange={(e) => updatePricing({ discounts: parseFloat(e.target.value) || 0, manualTotal: null })}
+              disabled={loading}
+              onChange={(e) => updatePricing({ discounts: parseFloat(e.target.value) || 0 })}
               className="w-20 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-right text-emerald-400 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors placeholder:text-emerald-900"
               placeholder="0.00"
             />
@@ -235,18 +246,34 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
             <span className="text-emerald-400">$</span>
             <input
               aria-label="Final total"
+              disabled={loading}
               type="number"
               step="0.01"
               min="0"
-              value={finalTotal ?? ''}
-              onChange={(e) => updatePricing({ manualTotal: e.target.value === '' ? null : Number(e.target.value) })}
+              value={editingTotal ?? finalTotal ?? ''}
+              onChange={(e) => {
+                setEditingTotal(e.target.value);
+                updatePricing({ manualTotal: e.target.value === '' ? null : Number(e.target.value) });
+              }}
+              onBlur={() => setEditingTotal(null)}
               placeholder="Not entered"
               className="w-36 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-right text-xl placeholder:text-sm font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
             />
           </div>
         </div>
+        {manualTotal !== null && (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <p className="text-slate-400">Using your entered final total.</p>
+            <button type="button" disabled={loading} onClick={() => {
+              setEditingTotal(null);
+              updatePricing({ manualTotal: null });
+            }} className="rounded-lg px-3 py-2 text-emerald-400 hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-emerald-400">
+              Use calculated total
+            </button>
+          </div>
+        )}
         <p className="text-xs text-slate-400">
-          Enter a total or price every item to calculate it automatically. Lists with more than two items can be saved with partial prices and no total.
+          Enter a final total to override item prices, taxes and discounts, or price every item to calculate it automatically. Lists with more than two items can be saved with partial prices and no total.
         </p>
 
         {error && (
@@ -257,6 +284,7 @@ export default function GroceryChecklist({ tripId, storeName, initialItems }: Gr
         )}
 
         <button
+          type="button"
           onClick={handleCheckout}
           disabled={loading || isOffline}
           className={`mt-6 w-full flex items-center justify-center rounded-xl font-bold py-4 px-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${

@@ -4,6 +4,7 @@ import MagicMonthBanner from '../../../src/components/dashboard/MagicMonthBanner
 import EarlyCycleWarnings from '../../../src/components/dashboard/EarlyCycleWarnings';
 import QuickExpenseFAB from '../../../src/components/dashboard/QuickExpenseFAB';
 import BottomNav from '../../../src/components/navigation/BottomNav';
+import TotalSpendCard from '../../../src/components/dashboard/TotalSpendCard';
 import { getPayCycleStatus } from '../../../src/lib/payCycleDates';
 import SettingsPage from '../../../src/app/(dashboard)/settings/page';
 import PastReceiptCard from '../../../src/components/groceries/PastReceiptCard';
@@ -38,6 +39,7 @@ createRoot(document.getElementById('root')!).render(
         </div>
       ) : (
         <div className="p-4 max-w-xl mx-auto">
+          <TotalSpendCard operational={100.10} exempt={30.30} total={130.40} />
           <MagicMonthBanner isMagicMonth={!window.location.search.includes('normal')} />
           <EarlyCycleWarnings cycle={getPayCycleStatus('2026-09-18', new Date('2026-09-28T18:00:00Z'))} />
           <QuickExpenseFAB paymentAccounts={accounts} activeProjects={[{ project_id: 'project-1', name: 'Emergency fund' }]} />
