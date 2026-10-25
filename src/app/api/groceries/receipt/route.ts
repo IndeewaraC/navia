@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { calculateGroceryTotal } from '@/src/lib/groceryPricing';
 
 const GroceryReceiptSchema = z.object({
-  source_account_id: z.string().uuid(),
   store_name: z.string().min(1, { message: "Store name is required" }),
   trip_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   raw_subtotal: z.number().nonnegative(),

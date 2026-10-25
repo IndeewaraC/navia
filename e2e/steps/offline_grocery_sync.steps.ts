@@ -53,14 +53,6 @@ Given('{string} has an active grocery trip at {string}', async function (usernam
   const { userId, cookieString } = await provisionTestUser(username);
   testUserId = userId;
 
-  // Make sure they have a checking account so active grocery page doesn't error
-  await adminAuthClient.from('payment_accounts').insert({
-    user_id: testUserId,
-    account_alias: 'Primary Checking',
-    account_type: 'DEBIT',
-    current_statement_balance: 5000.00
-  });
-
   const browser = await chromium.launch();
   context = await browser.newContext({ baseURL: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000' });
   
