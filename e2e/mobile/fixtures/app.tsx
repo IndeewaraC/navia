@@ -19,6 +19,8 @@ const settings = window.location.pathname === '/settings';
 const receipt = window.location.pathname === '/groceries/receipt-test';
 const vault = window.location.pathname === '/vault';
 const savedProjectAmount = Number(localStorage.getItem('navia-project-service-fixture') || 0);
+const savedReceipt = JSON.parse(localStorage.getItem('navia-receipt-service-fixture') || 'null');
+const receiptTotal = savedReceipt ? savedReceipt.final_settled_total : window.location.search.includes('unpriced') ? null : 20;
 
 createRoot(document.getElementById('root')!).render(
   <>
@@ -29,10 +31,10 @@ createRoot(document.getElementById('root')!).render(
           target_amount: 250, saved_amount: savedProjectAmount, icon: '🎯',
         }]} />
       ) : receipt ? (
-        <div className="p-4"><PastReceiptCard trip={{
-          trip_id: 'fixture-receipt', store_name: 'costco-20/10', trip_date: '2026-10-20',
-          final_settled_total: 20, receipt_items: [{ id: 'oliveoil', name: 'Olive oil', shelfPrice: 20 }],
-        }} /></div>
+        <div className="p-4">{savedReceipt?.deleted ? <p>No grocery trips logged yet.</p> : <PastReceiptCard trip={{
+          trip_id: '00000000-0000-4000-8000-000000000004', store_name: 'costco-20/10', trip_date: '2026-10-20',
+          final_settled_total: receiptTotal, receipt_items: [{ id: 'oliveoil', name: 'Olive oil', shelfPrice: 20 }],
+        }} />}</div>
       ) : groceries ? (
         <div className="pt-8 pb-32 px-4 sm:px-6">
           <GroceryChecklist tripId="mobile-regression" storeName="Mobile test store" initialItems={initialItems} />

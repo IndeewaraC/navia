@@ -68,6 +68,181 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
 
+const receiptActionUrl = '**/api/groceries/receipt/00000000-0000-4000-8000-000000000004';
+const receiptTrip = (total: number | null) => ({
+  trip_id: '00000000-0000-4000-8000-000000000004', store_name: 'costco-20/10', trip_date: '2026-10-20',
+  final_settled_total: total, receipt_items: [{ id: 'oliveoil', name: 'Olive oil', shelfPrice: 20 }],
+});
+
+test('Past Receipts can add a missing total and edit it again after reloading', async ({ page }) => {
+  const ledgerRequests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/api/transactions')) ledgerRequests.push(request.url()); });
+  await page.goto(`${baseURL}/groceries/receipt-test?unpriced`);
+  const card = page.getByRole('button', { name: 'View receipt for costco-20/10' });
+  await expect(card).toContainText('Total not entered');
+  const payloads: object[] = [];
+  await page.route(receiptActionUrl, async route => {
+    expect(route.request().method()).toBe('PATCH');
+    const body = route.request().postDataJSON();
+    payloads.push(body);
+    await page.evaluate(total => localStorage.setItem('navia-receipt-service-fixture', JSON.stringify({ final_settled_total: total })), body.final_settled_total);
+    await route.fulfill({ status: 200, json: { trip: receiptTrip(body.final_settled_total) } });
+  });
+  await page.getByRole('button', { name: 'Add total for costco-20/10', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Receipt for costco-20/10' });
+  await page.getByRole('spinbutton', { name: 'Final receipt total ($)' }).fill('42.75');
+  await dialog.getByRole('button', { name: 'Save total', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(card).toContainText('$42.75');
+  await page.reload();
+  await expect(card).toContainText('$42.75');
+  await page.getByRole('button', { name: 'Edit total for costco-20/10', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Final receipt total ($)' })).toHaveValue('42.75');
+  await page.getByRole('spinbutton', { name: 'Final receipt total ($)' }).fill('70.50');
+  await dialog.getByRole('button', { name: 'Save total', exact: true }).click();
+  await expect(card).toContainText('$70.50');
+  expect(payloads).toEqual([
+    { final_settled_total: 42.75, expected_total: null },
+    { final_settled_total: 70.5, expected_total: 42.75 },
+  ]);
+  expect(ledgerRequests).toEqual([]);
+});
+
+test('Past Receipts deletion requires confirmation and Keep receipt sends no delete request', async ({ page }) => {
+  await page.goto(`${baseURL}/groceries/receipt-test`);
+  const requests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/api/groceries/receipt/')) requests.push(request.method()); });
+  const remove = page.getByRole('button', { name: 'Delete receipt for costco-20/10', exact: true });
+  await remove.click();
+  const dialog = page.getByRole('dialog', { name: 'Receipt for costco-20/10' });
+  await expect(dialog).toContainText('Your separate spending transaction will stay in the ledger.');
+  const keep = dialog.getByRole('button', { name: 'Keep receipt' });
+  await expect(keep).toBeFocused();
+  await keep.click();
+  await expect(dialog.getByRole('button', { name: 'Confirm delete' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(remove).toBeFocused();
+  await expect(page.getByRole('button', { name: 'View receipt for costco-20/10' })).toBeVisible();
+  expect(requests).toEqual([]);
+});
+
+test('Past Receipts deletion and Undo persist the restored receipt without sending a ledger request', async ({ page }) => {
+  await page.goto(`${baseURL}/groceries/receipt-test`);
+  const methods: string[] = [], ledgerRequests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/api/transactions')) ledgerRequests.push(request.url()); });
+  await page.route(receiptActionUrl, async route => {
+    const method = route.request().method();
+    methods.push(method);
+    if (method === 'DELETE') {
+      expect(route.request().postDataJSON()).toEqual({ expected_total: 20 });
+      await page.evaluate(() => localStorage.setItem('navia-receipt-service-fixture', JSON.stringify({ deleted: true, final_settled_total: 20 })));
+      await route.fulfill({ status: 200, json: { undo_token: 'fixture-undo', undo_expires_at: Date.now() + 30_000 } });
+    } else {
+      expect(method).toBe('POST');
+      expect(route.request().postDataJSON()).toEqual({ undo_token: 'fixture-undo' });
+      await page.evaluate(() => localStorage.setItem('navia-receipt-service-fixture', JSON.stringify({ final_settled_total: 20 })));
+      await route.fulfill({ status: 200, json: { trip: receiptTrip(20) } });
+    }
+  });
+  await page.getByRole('button', { name: 'Delete receipt for costco-20/10', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'View receipt for costco-20/10' })).toHaveCount(0);
+  const undo = page.getByRole('button', { name: 'Undo delete for costco-20/10' });
+  await expect(undo).toBeFocused();
+  await undo.click();
+  await expect(page.getByRole('button', { name: 'View receipt for costco-20/10' })).toContainText('$20.00');
+  await expect(page.getByRole('status')).toContainText('Receipt restored.');
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'View receipt for costco-20/10' })).toContainText('$20.00');
+  expect(methods).toEqual(['DELETE', 'POST']);
+  expect(ledgerRequests).toEqual([]);
+});
+
+test('Past Receipts deletion remains saved when Undo expires and the page reloads', async ({ page }) => {
+  await page.clock.install({ time: new Date() });
+  await page.goto(`${baseURL}/groceries/receipt-test`);
+  await page.route(receiptActionUrl, async route => {
+    expect(route.request().method()).toBe('DELETE');
+    const now = await page.evaluate(() => Date.now());
+    await page.evaluate(() => localStorage.setItem('navia-receipt-service-fixture', JSON.stringify({ deleted: true, final_settled_total: 20 })));
+    await route.fulfill({ status: 200, json: { undo_token: 'fixture-undo', undo_expires_at: now + 30_000 } });
+  });
+  await page.getByRole('button', { name: 'Delete receipt for costco-20/10', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  const undo = page.getByRole('button', { name: 'Undo delete for costco-20/10' });
+  await expect(undo).toBeVisible();
+  await page.clock.fastForward(30_000);
+  await expect(undo).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText('No grocery trips logged yet.')).toBeVisible();
+});
+
+test('Past Receipts keeps an entered total after a failed save and allows a retry', async ({ page }) => {
+  await page.goto(`${baseURL}/groceries/receipt-test?unpriced`);
+  let attempts = 0;
+  await page.route(receiptActionUrl, route => route.fulfill(++attempts === 1
+    ? { status: 503, json: { error: 'Unable to save this total right now.' } }
+    : { status: 200, json: { trip: receiptTrip(42.75) } }));
+  await page.getByRole('button', { name: 'Add total for costco-20/10', exact: true }).click();
+  const input = page.getByRole('spinbutton', { name: 'Final receipt total ($)' });
+  await input.fill('42.75');
+  await page.getByRole('button', { name: 'Save total', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Unable to save this total right now.');
+  await expect(input).toHaveValue('42.75');
+  await expect(page.getByRole('button', { name: 'View receipt for costco-20/10' })).toContainText('Total not entered');
+  await page.getByRole('button', { name: 'Save total', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'View receipt for costco-20/10' })).toContainText('$42.75');
+});
+
+test('Past Receipts reports failed delete and failed Undo without discarding the retry', async ({ page }) => {
+  await page.goto(`${baseURL}/groceries/receipt-test`);
+  let deletes = 0, restores = 0;
+  await page.route(receiptActionUrl, route => {
+    if (route.request().method() === 'DELETE') return route.fulfill(++deletes === 1
+      ? { status: 503, json: { error: 'Receipt was not deleted. Try again.' } }
+      : { status: 200, json: { undo_token: 'fixture-undo', undo_expires_at: Date.now() + 30_000 } });
+    return route.fulfill(++restores === 1
+      ? { status: 503, json: { error: 'Unable to restore right now. Try again.' } }
+      : { status: 200, json: { trip: receiptTrip(20) } });
+  });
+  await page.getByRole('button', { name: 'Delete receipt for costco-20/10', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Receipt was not deleted. Try again.');
+  await expect(page.getByRole('button', { name: 'View receipt for costco-20/10' })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  const undo = page.getByRole('button', { name: 'Undo delete for costco-20/10' });
+  await undo.click();
+  await expect(page.getByRole('alert')).toContainText('Unable to restore right now. Try again.');
+  await expect(undo).toBeEnabled();
+  await undo.click();
+  await expect(page.getByRole('button', { name: 'View receipt for costco-20/10' })).toContainText('$20.00');
+});
+
+test('Past Receipts actions remain accessible in a short 320px viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 420 });
+  await page.goto(`${baseURL}/groceries/receipt-test`);
+  const edit = page.getByRole('button', { name: 'Edit total for costco-20/10', exact: true });
+  await edit.click();
+  const input = page.getByRole('spinbutton', { name: 'Final receipt total ($)' });
+  await expect(input).toBeFocused();
+  const save = page.getByRole('button', { name: 'Save total', exact: true });
+  await save.scrollIntoViewIfNeeded();
+  const bounds = await save.boundingBox();
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(420);
+  await page.keyboard.press('Escape');
+  await expect(edit).toBeFocused();
+  await page.getByRole('button', { name: 'Delete receipt for costco-20/10', exact: true }).click();
+  const confirm = page.getByRole('button', { name: 'Confirm delete', exact: true });
+  await confirm.scrollIntoViewIfNeeded();
+  const confirmBounds = await confirm.boundingBox();
+  expect(confirmBounds!.y + confirmBounds!.height).toBeLessThanOrEqual(420);
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: `.next/mobile-layout-harness/receipt-actions-${test.info().project.name}-320.png`, fullPage: true });
+});
+
 for (const timezoneId of ['America/Winnipeg', 'UTC', 'Pacific/Kiritimati']) {
   test(`receipt list and details preserve October 20 in ${timezoneId}`, async ({ browser }) => {
     const context = await browser.newContext({ timezoneId, viewport: { width: 390, height: 844 } });
