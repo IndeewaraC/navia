@@ -8,11 +8,10 @@ import { calculateGroceryTotal } from '@/src/lib/groceryPricing';
 interface GroceryChecklistProps {
   tripId: string;
   storeName: string;
-  accountId: string;
   initialItems: GroceryItem[];
 }
 
-export default function GroceryChecklist({ tripId, storeName, accountId, initialItems }: GroceryChecklistProps) {
+export default function GroceryChecklist({ tripId, storeName, initialItems }: GroceryChecklistProps) {
   const router = useRouter();
   const { items, storeName: draftStoreName, updateStoreName, updateItem, addItem, removeItem, saveDraft, clearDraft, isOffline, rawSubtotal, pricing, updatePricing } = useOfflineGroceryDraft(tripId, initialItems, storeName);
   
@@ -63,7 +62,6 @@ export default function GroceryChecklist({ tripId, storeName, accountId, initial
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          source_account_id: accountId,
           store_name: draftStoreName || 'Unnamed Store',
           trip_date: new Date().toISOString().split('T')[0],
           raw_subtotal: rawSubtotal,

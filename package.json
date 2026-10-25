@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:mobile": "playwright test --config e2e/mobile-layout.config.ts"
+    "test:mobile": "playwright test --config e2e/mobile-layout.config.ts",
+    "test:analyze": "node --test tests/analyze.test.mjs && playwright test --config e2e/analyze.config.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

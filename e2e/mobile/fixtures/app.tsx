@@ -16,7 +16,7 @@ createRoot(document.getElementById('root')!).render(
     <main className="pb-[calc(var(--bottom-nav-height)+2rem)]">
       {groceries ? (
         <div className="pt-8 pb-32 px-4 sm:px-6">
-          <GroceryChecklist tripId="mobile-regression" storeName="Mobile test store" accountId="account-0" initialItems={initialItems} />
+          <GroceryChecklist tripId="mobile-regression" storeName="Mobile test store" initialItems={initialItems} />
         </div>
       ) : (
         <div className="p-4 max-w-xl mx-auto">

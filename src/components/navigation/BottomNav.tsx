@@ -11,13 +11,14 @@ export default function BottomNav() {
     { name: 'Ledger', href: '/ledger', icon: '💳' },
     { name: 'Groceries', href: '/groceries', icon: '🛒' },
     { name: 'History', href: '/history', icon: '📜' },
+    { name: 'Analyze', href: '/analyze', icon: '📊' },
     { name: 'Vault', href: '/vault', icon: '🏦' }, 
     { name: 'Settings', href: '/settings', icon: '⚙️' },
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-lg border-t border-slate-800 pb-safe">
-      <div className="flex items-center justify-around h-16 max-w-md mx-auto px-2">
+      <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-1 sm:px-2">
         {navItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== '/ledger' && pathname?.startsWith(item.href));
 
@@ -25,16 +26,17 @@ export default function BottomNav() {
             <Link
               key={item.name}
               href={item.href}
-              className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-all duration-200 ${
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex min-w-0 flex-col items-center justify-center w-full h-full space-y-1 transition-all duration-200 ${
                 isActive 
                   ? 'text-emerald-400 scale-105' 
                   : 'text-slate-500 hover:text-slate-300 hover:scale-105'
               }`}
             >
-              <span className={`text-xl transition-transform ${isActive ? '-translate-y-0.5' : ''}`}>
+              <span aria-hidden="true" className={`text-xl transition-transform ${isActive ? '-translate-y-0.5' : ''}`}>
                 {item.icon}
               </span>
-              <span className="text-[10px] font-bold tracking-wider uppercase">
+              <span className="text-[9px] sm:text-[10px] font-bold sm:tracking-wider uppercase">
                 {item.name}
               </span>
             </Link>

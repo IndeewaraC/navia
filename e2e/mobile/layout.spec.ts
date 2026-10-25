@@ -183,6 +183,7 @@ for (const viewport of [
       page.waitForRequest('**/api/groceries/receipt'), save.click(),
     ]);
     const payload = request.postDataJSON();
+    expect(payload).not.toHaveProperty('source_account_id');
     expect(payload.items).toHaveLength(31);
     expect(payload.items[0].shelfPrice).toBe(4.5);
     expect(payload.items[30].shelfPrice).toBe(9.75);

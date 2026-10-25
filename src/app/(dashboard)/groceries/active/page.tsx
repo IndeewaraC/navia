@@ -18,33 +18,7 @@ export default async function ActiveGroceryTripPage({
     redirect('/login');
   }
 
-  // Fetch the primary checking account to link the receipt to
-  let { data: account } = await supabase
-    .from('payment_accounts')
-    .select('account_id, account_alias')
-    .eq('user_id', user.id)
-    .ilike('account_alias', '%checking%')
-    .limit(1)
-    .single();
-
-  let accountId = account?.account_id;
-
-  // Auto-create a default checking account if the user doesn't have one (for new users)
-  if (!accountId) {
-    const { data: newAccount } = await supabase
-      .from('payment_accounts')
-      .insert({
-        user_id: user.id,
-        account_alias: 'Primary Checking',
-        account_type: 'DEBIT',
-        current_statement_balance: 5000.00
-      })
-      .select('account_id')
-      .single();
-    
-    accountId = newAccount?.account_id || '00000000-0000-0000-0000-000000000000';
-  }
-
+  // Grocery receipts track prices independently of the user's payment accounts.
   const params = await searchParams;
   let tripIdParam = params.tripId;
   if (Array.isArray(tripIdParam)) {
@@ -57,7 +31,6 @@ export default async function ActiveGroceryTripPage({
       <GroceryChecklist 
         tripId={activeTripId}
         storeName="Local Supermarket"
-        accountId={accountId}
         initialItems={[]}
       />
     </div>

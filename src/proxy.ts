@@ -38,6 +38,7 @@ export default async function proxy(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/verify-otp');
 
   const isProtectedRoute =
+    request.nextUrl.pathname.startsWith('/analyze') ||
     request.nextUrl.pathname.startsWith('/ledger') ||
     request.nextUrl.pathname.startsWith('/groceries') ||
     request.nextUrl.pathname.startsWith('/projects') ||
