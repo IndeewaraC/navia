@@ -1,5 +1,10 @@
 # Release history
 
+## Unreleased
+
+- Add and edit final totals directly from Past Receipts, preserving item prices and separate spending transactions.
+- Delete a receipt after confirmation, with a 30-second Undo action that restores its original ID, date, items, total and transaction link. Receipt actions authenticate the user, enforce ownership and reject stale updates. No database migration is required.
+
 ## 0.1.1 — 2026-10-21
 
 Tracking: [release #10](https://github.com/IndeewaraC/navia/issues/10).

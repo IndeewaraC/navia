@@ -13,6 +13,7 @@ const originalLoad = Module._load;
 Module._load = function (id, parent, isMain) {
   if (id === '@/src/lib/supabase/server') return { createClient: () => database };
   if (id === 'next/cache') return { revalidatePath() {} };
+  if (id === 'next/navigation') return { useRouter: () => ({ refresh() {} }) };
   if (id.startsWith('@/')) id = path.resolve(id.slice(2));
   return originalLoad.call(this, id, parent, isMain);
 };
