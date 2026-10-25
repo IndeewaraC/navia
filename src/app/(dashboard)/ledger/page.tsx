@@ -2,6 +2,9 @@ import { createClient } from '@/src/lib/supabase/server';
 import EarlyCycleWarnings from '@/src/components/dashboard/EarlyCycleWarnings';
 import QuickExpenseFAB from '@/src/components/dashboard/QuickExpenseFAB';
 import MagicMonthBanner from '@/src/components/dashboard/MagicMonthBanner';
+import TotalSpendCard from '@/src/components/dashboard/TotalSpendCard';
+import { fetchSpendingTransactions } from '@/src/lib/analyze';
+import { calculateSpendingTotals } from '@/src/lib/spendingTotals';
 
 export default async function DashboardPage() {
   // Await createClient() as mandated by Next.js 15+ cookies() async restrictions
@@ -37,25 +40,19 @@ export default async function DashboardPage() {
   const { data: cycleData } = await supabase.rpc('get_pay_cycle_status', { p_user_id: user.id });
 
   // 3. Fetch Spend Data for the Current Cycle
-  let operationalSpend = 0;
-  let exemptSpend = 0;
-
   // Use cycle start if available, otherwise fallback to the 1st of the current month
-  let effectiveStartDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const today = new Date().toISOString().slice(0, 10);
+  let effectiveStartDate = `${today.slice(0, 7)}-01`;
   const isMissingAnchor = !cycleData || cycleData.error;
   
   if (!isMissingAnchor && cycleData?.cycle_start) {
-    effectiveStartDate = cycleData.cycle_start;
+    effectiveStartDate = cycleData.cycle_start.slice(0, 10);
   }
 
-  const { data: txns } = await supabase
-    .from('transactions')
-    .select('amount, category, txn_type, is_budget_cap_exempt, transaction_date, source_account_id')
-    .eq('user_id', user.id)
-    .gte('transaction_date', effectiveStartDate)
-    .order('transaction_date', { ascending: false });
-
-  const spentPerAccount: Record<string, number> = {};
+  const txns = await fetchSpendingTransactions(supabase, user.id, { startDate: effectiveStartDate, endDate: today });
+  const spending = calculateSpendingTotals(txns);
+  const operationalSpend = spending.operational;
+  const exemptSpend = spending.exempt;
 
   const { data: recentTransactions } = await supabase
     .from('transactions')
@@ -65,22 +62,6 @@ export default async function DashboardPage() {
     .order('created_at', { ascending: false, nullsFirst: false })
     .order('transaction_id', { ascending: false })
     .limit(10);
-
-  if (txns) {
-    
-    txns.forEach((txn) => {
-      if (txn.txn_type === 'EXPENSE') {
-        if (txn.is_budget_cap_exempt) {
-          exemptSpend += Number(txn.amount);
-        } else {
-          operationalSpend += Number(txn.amount);
-          if (txn.source_account_id) {
-            spentPerAccount[txn.source_account_id] = (spentPerAccount[txn.source_account_id] || 0) + Number(txn.amount);
-          }
-        }
-      }
-    });
-  }
 
   // Calculate Dual-Layer Gauge logic
   // Use the sum of all monthly limits
@@ -142,24 +123,33 @@ export default async function DashboardPage() {
         </section>
       </div>
 
+      <TotalSpendCard operational={operationalSpend} exempt={exemptSpend} total={spending.total} />
+
       {/* Funding Sources */}
       {accounts && accounts.length > 0 && (
         <section>
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 px-2">Active Funding Sources</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {accounts.filter(a => (a.routine_monthly_limit || 0) > 0).map(acc => {
-              const spent = spentPerAccount[acc.account_id] || 0;
-              const remaining = (acc.routine_monthly_limit || 0) - spent;
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {accounts.map(acc => {
+              const accountSpend = spending.perAccount.get(acc.account_id) || { operational: 0, exempt: 0, total: 0 };
+              const accountLimit = Number(acc.routine_monthly_limit) || 0;
+              const remaining = accountLimit - accountSpend.operational;
               const isOverLimit = remaining < 0;
               const remainingText = isOverLimit ? `-$${Math.abs(remaining).toFixed(2)}` : `$${remaining.toFixed(2)}`;
               
               return (
                 <div key={acc.account_id} className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-center">
                   <span className="font-bold text-slate-200 text-sm truncate" title={acc.account_alias}>{acc.account_alias}</span>
-                  <span className={`${isOverLimit ? 'text-rose-400' : 'text-emerald-400'} font-black mt-1`}>
-                    {remainingText} <span className="text-slate-500 font-medium text-xs">{isOverLimit ? 'over' : 'left'}</span>
-                  </span>
-                  <span className="text-slate-500 text-xs mt-0.5">of ${acc.routine_monthly_limit.toFixed(2)} limit</span>
+                  <dl className="mt-3 space-y-2 text-xs">
+                    <div className="flex justify-between gap-2"><dt className="text-slate-400">Operational spent</dt><dd className="font-semibold text-slate-200">${accountSpend.operational.toFixed(2)}</dd></div>
+                    <div className="flex justify-between gap-2"><dt className="text-slate-400">Exempt spent</dt><dd className="font-semibold text-indigo-300">${accountSpend.exempt.toFixed(2)}</dd></div>
+                    <div className="flex justify-between gap-2 border-t border-slate-800 pt-2 text-sm"><dt className="font-bold text-slate-200">Total spent</dt><dd className="font-black text-emerald-400">${accountSpend.total.toFixed(2)}</dd></div>
+                  </dl>
+                  {accountLimit > 0 ? (
+                    <span className={`mt-3 text-xs ${isOverLimit ? 'text-rose-400' : 'text-slate-400'}`}>
+                      {remainingText} {isOverLimit ? 'over' : 'left'} of ${accountLimit.toFixed(2)} operational limit
+                    </span>
+                  ) : <span className="mt-3 text-xs text-slate-500">No operational limit set</span>}
                 </div>
               );
             })}

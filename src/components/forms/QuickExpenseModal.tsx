@@ -78,11 +78,18 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
     setShowDropdown(false);
   };
 
+  const handleClose = () => {
+    setWarning(null);
+    setError('');
+    setShowDropdown(false);
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!merchantInput || !amount) return;
+    if (loading || !merchantInput.trim() || !amount) return;
     
     setLoading(true);
     setError('');
@@ -126,19 +133,15 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
       setMerchantInput('');
       setIsExempt(false);
       setSelectedProjectId('');
+      setShowDropdown(false);
 
       // Check for Navia Dual-Layer alerts (80% or 100% operational breach)
       if (data.threshold_alert) {
         setWarning(data.threshold_alert);
-        // Do not immediately close the modal so the user sees the warning
-        setTimeout(() => {
-          onClose();
-          router.refresh();
-        }, 3000);
       } else {
-        onClose();
-        router.refresh();
+        handleClose();
       }
+      router.refresh();
 
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -159,7 +162,8 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
         <div className="shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-slate-800/50">
           <h2 id="expense-modal-title" className="text-xl font-bold tracking-tight text-slate-100">Log Expense</h2>
           <button 
-            onClick={onClose}
+            onClick={handleClose}
+            disabled={loading}
             className="p-1 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors"
             aria-label="Close modal"
           >
@@ -311,20 +315,23 @@ export default function QuickExpenseModal({ isOpen, onClose, paymentAccounts = [
           )}
           
           {warning && (
-            <div className={`p-4 rounded-xl border font-medium text-sm flex items-start space-x-3 ${
+            <div role="status" className={`p-4 rounded-xl border font-medium text-sm flex items-start space-x-3 ${
               warning.level === 'BREACH' 
                 ? 'bg-red-500/10 border-red-500/20 text-red-400' 
                 : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
             }`}>
               <span className="text-lg shrink-0">⚠️</span>
-              <p className="mt-0.5">{warning.message}</p>
+              <div className="space-y-1">
+                <p className="text-slate-200">Expense saved. You can add another expense.</p>
+                <p>{warning.message}</p>
+              </div>
             </div>
           )}
 
           {/* Submit Action */}
           <button
             type="submit"
-            disabled={loading || !!warning}
+            disabled={loading}
             className="w-full flex items-center justify-center rounded-xl bg-emerald-500 text-slate-950 font-bold py-4 px-4 hover:bg-emerald-400 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(16,185,129,0.1)] hover:shadow-[0_0_25px_rgba(16,185,129,0.2)]"
           >
             {loading ? (

@@ -8,6 +8,7 @@ export type SpendingTransaction = {
   txn_type: string;
   transaction_date: string;
   source_account_id: string | null;
+  is_budget_cap_exempt?: boolean | null;
 };
 export type PaymentAccount = { account_id: string; account_alias: string };
 export type SpendingGroup = { key: string; name: string; total: number; count: number };
@@ -54,7 +55,7 @@ export async function fetchSpendingTransactions(
 
   for (let offset = 0; ; offset += pageSize) {
     let query = supabase.from('transactions')
-      .select('transaction_id, amount, category, txn_type, transaction_date, source_account_id')
+      .select('transaction_id, amount, category, txn_type, transaction_date, source_account_id, is_budget_cap_exempt')
       .eq('user_id', userId)
       .eq('txn_type', 'EXPENSE')
       .gte('transaction_date', range.startDate)

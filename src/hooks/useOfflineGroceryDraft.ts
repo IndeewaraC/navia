@@ -110,10 +110,6 @@ export function useOfflineGroceryDraft(tripId: string, initialDraft: GroceryItem
     );
     itemsRef.current = nextState;
     setItems(nextState);
-    if ('shelfPrice' in updates) {
-      pricingRef.current = { ...pricingRef.current, manualTotal: null };
-      setPricing(pricingRef.current);
-    }
     saveToStorage(storeName, nextState);
   }, [storeName, saveToStorage]);
 

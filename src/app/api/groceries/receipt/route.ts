@@ -2,6 +2,7 @@ import { createClient } from '@/src/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { calculateGroceryTotal } from '@/src/lib/groceryPricing';
+import { revalidatePath } from 'next/cache';
 
 const GroceryReceiptSchema = z.object({
   store_name: z.string().min(1, { message: "Store name is required" }),
@@ -61,6 +62,8 @@ export async function POST(request: Request) {
       .single();
 
     if (tripError) throw new Error('Failed to record receipt metadata.');
+
+    revalidatePath('/groceries');
 
     return NextResponse.json(
       { message: 'Grocery prices saved successfully.', trip_id: trip.trip_id },
